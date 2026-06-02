@@ -1,45 +1,54 @@
 {
-  "name": "plugin-antigravity-auth",
-  "version": "1.6.0",
-  "description": "Google Antigravity OAuth plugin for OpenCode and Claude Code — multi-account rotation, quota management, proxy support",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "type": "module",
-  "license": "MIT",
-  "author": "intisy",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/intisy/antigravity-auth.git"
-  },
-  "keywords": ["opencode", "claude", "antigravity", "google", "oauth", "gemini", "plugin", "auth"],
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "files": [
-    "dist/",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "prepublishOnly": "npm run build"
-  },
-  "dependencies": {
-    "@openauthjs/openauth": "^0.4.3",
-    "@opencode-ai/plugin": "^0.15.30",
-    "proper-lockfile": "^4.1.2",
-    "xdg-basedir": "^5.1.0",
-    "zod": "^4.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@types/proper-lockfile": "^4.1.4",
-    "typescript": "^5.0.0",
-    "vitest": "^4.1.7"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  }
+    "name":  "antigravity-oauth",
+    "version":  "1.6.0",
+    "description":  "Google Antigravity OAuth plugin for OpenCode and Claude Code — multi-account rotation, quota management, proxy support",
+    "main":  "dist/index.js",
+    "types":  "dist/index.d.ts",
+    "type":  "module",
+    "license":  "MIT",
+    "author":  "intisy",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/intisy/antigravity-auth.git"
+                   },
+    "keywords":  [
+                     "opencode",
+                     "claude",
+                     "antigravity",
+                     "google",
+                     "oauth",
+                     "gemini",
+                     "plugin",
+                     "auth"
+                 ],
+    "engines":  {
+                    "node":  "\u003e=20.0.0"
+                },
+    "files":  [
+                  "dist/",
+                  "README.md",
+                  "LICENSE"
+              ],
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.build.json",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run",
+                    "prepublishOnly":  "npm run build"
+                },
+    "dependencies":  {
+                         "@openauthjs/openauth":  "^0.4.3",
+                         "@opencode-ai/plugin":  "^0.15.30",
+                         "proper-lockfile":  "^4.1.2",
+                         "xdg-basedir":  "^5.1.0",
+                         "zod":  "^4.0.0"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^25.9.1",
+                            "@types/proper-lockfile":  "^4.1.4",
+                            "typescript":  "^5.0.0",
+                            "vitest":  "^4.1.7"
+                        },
+    "peerDependencies":  {
+                             "typescript":  "^5"
+                         }
 }
