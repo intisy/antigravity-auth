@@ -1,6 +1,0 @@
-{
-  "SessionStart": {
-    "script": "scripts/start-proxy.js",
-    "description": "Starts the Antigravity proxy server in the background"
-  }
-}

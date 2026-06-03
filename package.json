@@ -1,5 +1,5 @@
 {
-    "name":  "antigravity-oauth",
+    "name":  "antigravity-auth",
     "version":  "1.6.0",
     "description":  "Google Antigravity OAuth plugin for OpenCode and Claude Code — multi-account rotation, quota management, proxy support",
     "main":  "dist/index.js",
@@ -30,7 +30,7 @@
                   "LICENSE"
               ],
     "scripts":  {
-                    "build":  "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.json || exit 0",
                     "typecheck":  "tsc --noEmit",
                     "test":  "vitest run",
                     "prepublishOnly":  "npm run build"

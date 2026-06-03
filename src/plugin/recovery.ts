@@ -177,7 +177,7 @@ async function recoverToolResultMissing(
   try {
     await client.session.prompt({
       path: { id: sessionID },
-      // @ts-expect-error - SDK types may not include tool_result parts
+      // 
       body: { parts: toolResultParts },
     });
 

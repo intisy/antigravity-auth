@@ -1,17 +1,18 @@
-import { AntigravityCLIOAuthPlugin, GoogleOAuthPlugin } from "./src/plugin";
+import { AntigravityCLIOAuthPlugin, GoogleOAuthPlugin } from "./plugin";
 
 export { AntigravityCLIOAuthPlugin, GoogleOAuthPlugin };
 
 export {
   authorizeAntigravity,
   exchangeAntigravity,
-} from "./src/antigravity/oauth";
+} from "./antigravity/oauth";
 
 export type {
   AntigravityAuthorization,
   AntigravityTokenExchangeResult,
-} from "./src/antigravity/oauth";
+} from "./antigravity/oauth";
 
 export default AntigravityCLIOAuthPlugin;
 
 export const server = AntigravityCLIOAuthPlugin;
+
