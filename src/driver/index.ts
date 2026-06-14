@@ -13,6 +13,7 @@ import { models } from "./models.js";
 import { oauthConfig } from "./config.js";
 import { laneFor, headerStyleFor, parseRateLimitReason, resetTimeFor } from "./lanes.js";
 import { runMigration } from "./migrate.js";
+import { login } from "./login.js";
 
 const PROVIDER_ID = "antigravity";
 const MAX_ATTEMPTS = 6;   // total account/endpoint attempts before giving up
@@ -148,6 +149,7 @@ export const driver = {
   opencodeNpm: "@ai-sdk/anthropic",
   models,
   handle,
+  login,
 };
 
 export const AntigravityProvider = defineProvider(driver).opencode;
