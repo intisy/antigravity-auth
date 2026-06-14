@@ -1,4 +1,4 @@
-name: Publish to npm
+﻿name: Publish to npm
 
 on:
   push:
@@ -14,11 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+
+      - run: npm install
+
+      - run: npm run build
 
       - name: Set version from tag
         run: |
@@ -27,3 +33,5 @@ jobs:
           npm version $VERSION --allow-same-version --no-git-tag-version
 
       - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
