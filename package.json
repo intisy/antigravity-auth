@@ -102,7 +102,7 @@
     ]
   },
   "scripts": {
-    "build": "npx tsc --project core-auth/tsconfig.json && node build.mjs",
+    "build": "npx tsc --project core-auth/sync-bridge/tsconfig.json && npx tsc --project core-auth/tsconfig.json && node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
