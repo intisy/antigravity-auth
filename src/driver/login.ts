@@ -1,9 +1,12 @@
 // @ts-nocheck
-// Google OAuth login for antigravity, on core-auth. Runs the existing PKCE flow
-// (antigravity/oauth) over core-auth's generic local-callback listener, then
-// persists the result as a CoreAccount via core-auth addAccount. The same core
-// store is read by both the OpenCode loader and the Claude proxy, so one login
-// works everywhere; no provider-side storage or app coupling.
+// Google OAuth login for antigravity, on core-auth. The PKCE flow (antigravity/
+// oauth) runs over core-auth's generic local-callback listener; the result is
+// persisted as a CoreAccount via core-auth addAccount. The same core store is read
+// by both the OpenCode loader and the Claude proxy, so one login works everywhere.
+//
+// loginFlow() is the split begin/complete form core-auth's opencode oauth method
+// drives (authorize() returns the URL, callback() awaits complete()). login() is
+// the all-in-one form the CLI uses (opens the browser itself).
 
 import { spawn } from "child_process";
 import { startOAuthListener, addAccount } from "../../core-auth/dist/index.js";
@@ -36,34 +39,46 @@ function toCoreAccount(result) {
     lastUsed: 0,
     enabled: true,
     rateLimitResetTimes: {},
-    meta: {
-      projectId: result.projectId || parts.projectId,
-      managedProjectId: parts.managedProjectId,
-    },
+    meta: { projectId: result.projectId || parts.projectId, managedProjectId: parts.managedProjectId },
   };
   try { account.meta.fingerprint = generateFingerprint(); } catch {}
   return account;
 }
 
-// run the full browser login; resolves with the persisted CoreAccount.
-export async function login(opts) {
-  const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
+// begin/complete form: authorize URL now, finish (capture code -> exchange ->
+// persist) when complete() is awaited. core-auth's opencode oauth method drives this.
+export async function loginFlow() {
   const authorization = await authorizeAntigravity();
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
-  try {
-    log("Open this URL in your browser to authenticate with Google:\n\n  " + authorization.url + "\n");
-    tryOpenBrowser(authorization.url);
-    const callbackUrl = await listener.waitForCallback();
-    const code = callbackUrl.searchParams.get("code");
-    const state = callbackUrl.searchParams.get("state");
-    if (!code || !state) throw new Error("OAuth callback missing code/state");
-    const result = await exchangeAntigravity(code, state);
-    if (result.type !== "success") throw new Error("Token exchange failed: " + result.error);
-    const account = toCoreAccount(result);
-    addAccount(PROVIDER_ID, account);
-    log("Logged in" + (account.email ? " as " + account.email : "") + " and saved to the antigravity account pool.");
-    return account;
-  } finally {
-    try { await listener.close(); } catch {}
-  }
+  return {
+    url: authorization.url,
+    instructions: "Sign in with Google in your browser; the terminal continues automatically.",
+    complete: async () => {
+      try {
+        const callbackUrl = await listener.waitForCallback();
+        const code = callbackUrl.searchParams.get("code");
+        const state = callbackUrl.searchParams.get("state");
+        if (!code || !state) return null;
+        const result = await exchangeAntigravity(code, state);
+        if (result.type !== "success") return null;
+        const account = toCoreAccount(result);
+        addAccount(PROVIDER_ID, account);
+        return account;
+      } finally {
+        try { await listener.close(); } catch {}
+      }
+    },
+  };
+}
+
+// all-in-one form for the CLI: open the browser, then await completion
+export async function login(opts) {
+  const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
+  const flow = await loginFlow();
+  log("Open this URL in your browser to authenticate with Google:\n\n  " + flow.url + "\n");
+  tryOpenBrowser(flow.url);
+  const account = await flow.complete();
+  if (!account) throw new Error("login failed");
+  log("Logged in" + (account.email ? " as " + account.email : "") + " and saved to the antigravity account pool.");
+  return account;
 }
