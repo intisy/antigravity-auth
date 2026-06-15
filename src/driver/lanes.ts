@@ -1,9 +1,5 @@
 // @ts-nocheck
-// Lane derivation + rate-limit-reason parsing for antigravity. "Lanes" partition
-// the core rate-limit state per quota family: "claude" | "gemini-antigravity" |
-// "gemini-cli". These classifications are provider-specific, so they stay in the
-// driver; the core only stores the resulting reset times. Ported from the old
-// plugin/accounts.ts so behavior (backoffs, reason scanning) is unchanged.
+// Lane derivation + rate-limit-reason parsing for antigravity; lanes partition rate-limit state per quota family: claude | gemini-antigravity | gemini-cli.
 
 import { getModelFamily } from "../plugin/transform/model-resolver.js";
 
@@ -20,13 +16,11 @@ function isGeminiCliModel(model) {
   return typeof model === "string" && model.startsWith("gemini-");
 }
 
-// model id -> rate-limit lane
 export function laneFor(model) {
   if (getModelFamily(model || "") === "claude") return "claude";
   return isGeminiCliModel(model) ? "gemini-cli" : "gemini-antigravity";
 }
 
-// model id -> upstream header style (bare gemini-* use the gemini-cli style)
 export function headerStyleFor(model) {
   return isGeminiCliModel(model) ? "gemini-cli" : "antigravity";
 }
@@ -67,7 +61,6 @@ export function calculateBackoffMs(reason, consecutiveFailures, retryAfterMs) {
   return Math.min(Math.round(base * multiplier), MAX_EXPONENTIAL_BACKOFF);
 }
 
-// epoch ms a lane should remain rate-limited, for AccountManager.reportRateLimit
 export function resetTimeFor(reason, consecutiveFailures, retryAfterMs) {
   return Date.now() + calculateBackoffMs(reason, consecutiveFailures, retryAfterMs);
 }

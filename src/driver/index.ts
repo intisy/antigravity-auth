@@ -146,15 +146,13 @@ async function handle(request, ctx) {
 export const driver = {
   id: PROVIDER_ID,
   label: "Antigravity",
-  // attach to the built-in "google" provider so OpenCode lists us under
-  // `auth login` (a custom provider id is not surfaced in the picker); this
-  // mirrors the original plugin's ANTIGRAVITY_PROVIDER_ID = "google".
-  opencodeProvider: "google",
+  opencodeProvider: "google", // opencode's auth picker only lists built-in providers, not custom ids
   models,
   handle,
   login,
   loginFlow,
   accounts: createAntigravityAccounts(manager),
+  onLoad: (ctx) => { ensureMigrated(ctx && ctx.configDir); },
 };
 
 export const AntigravityProvider = defineProvider(driver).opencode;

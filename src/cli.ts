@@ -1,9 +1,5 @@
 // @ts-nocheck
-// Standalone CLI for antigravity account management. Writes to the shared
-// core-auth store, so accounts added here are used by both OpenCode and Claude.
-//   antigravity login            add an account via Google OAuth
-//   antigravity list             list saved accounts
-//   antigravity remove <email>   remove an account
+// Standalone CLI for antigravity account management; writes to the shared core-auth store so accounts are used by both OpenCode and Claude.
 
 import { listAccounts, removeAccount } from "../core-auth/dist/index.js";
 import { login } from "./driver/login.js";

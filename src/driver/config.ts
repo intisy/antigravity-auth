@@ -1,7 +1,5 @@
 // @ts-nocheck
-// Antigravity driver configuration. Secrets are env-first so nothing sensitive
-// has to live in the repo (the constants are public-installed-app fallbacks);
-// this also keeps the bundled core-auth submodule secret-free.
+// Antigravity driver configuration; secrets are env-first with public-installed-app constants as fallback so the repo stays secret-free.
 
 import {
   ANTIGRAVITY_CLIENT_ID,
@@ -20,7 +18,6 @@ const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export function clientId() { return process.env.ANTIGRAVITY_CLIENT_ID || ANTIGRAVITY_CLIENT_ID; }
 export function clientSecret() { return process.env.ANTIGRAVITY_CLIENT_SECRET || ANTIGRAVITY_CLIENT_SECRET; }
 
-// consumed by core-auth's AccountManager for refresh_token grants
 export function oauthConfig() {
   return {
     tokenUrl: TOKEN_URL,

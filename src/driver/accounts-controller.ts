@@ -1,7 +1,5 @@
 // @ts-nocheck
-// Antigravity's AccountController — the provider owns all account status / quota /
-// settings semantics here; core-auth's helper handles the generic list/enable/
-// remove plumbing, and the shared core TUI only renders what this returns.
+// Antigravity's AccountController: provider-owned status/quota semantics layered on core-auth's generic list/enable/remove helper.
 
 import { accountControllerFromManager } from "../../core-auth/dist/index.js";
 import { login } from "./login.js";
@@ -16,7 +14,6 @@ function antigravityStatus(account, now) {
   return "active";
 }
 
-// quota comes from the provider's cached per-group quota (meta.cachedQuota)
 function antigravityQuota(account) {
   const cached = account.meta && account.meta.cachedQuota;
   if (!cached) return undefined;

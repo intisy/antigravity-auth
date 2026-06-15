@@ -1,8 +1,5 @@
 // @ts-nocheck
-// One-time import of the legacy antigravity-accounts.json (V4) pool into the
-// generic core-auth store. The provider-specific schema knowledge lives here;
-// core-auth only runs this mapper and writes generic CoreAccounts. No feature is
-// lost — everything that is not a first-class CoreAccount field goes into `meta`.
+// One-time import of legacy antigravity-accounts.json into the core-auth store; anything that isn't a first-class CoreAccount field goes into `meta` so nothing is lost.
 
 import { join } from "path";
 import { migrateLegacy } from "../../core-auth/dist/index.js";
@@ -10,7 +7,6 @@ import { parseRefreshParts } from "../plugin/auth.js";
 
 const LEGACY_FILE = "antigravity-accounts.json";
 
-// AccountMetadataV3 -> CoreAccount
 export function mapLegacyAccount(entry) {
   if (!entry || !entry.refreshToken) return null;
   const parts = parseRefreshParts(entry.refreshToken);

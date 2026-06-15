@@ -1,6 +1,4 @@
-// Bundles the OpenCode + Claude entries into single ESM files. The banner
-// restores `require` so bundled CommonJS deps (e.g. proper-lockfile) can load
-// Node builtins under the ESM output format.
+// Bundles the OpenCode + Claude entries into single ESM files; the banner restores `require` so bundled CommonJS deps load under ESM output.
 import { build } from "esbuild";
 
 const banner = {

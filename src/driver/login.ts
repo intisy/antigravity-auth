@@ -1,12 +1,5 @@
 // @ts-nocheck
-// Google OAuth login for antigravity, on core-auth. The PKCE flow (antigravity/
-// oauth) runs over core-auth's generic local-callback listener; the result is
-// persisted as a CoreAccount via core-auth addAccount. The same core store is read
-// by both the OpenCode loader and the Claude proxy, so one login works everywhere.
-//
-// loginFlow() is the split begin/complete form core-auth's opencode oauth method
-// drives (authorize() returns the URL, callback() awaits complete()). login() is
-// the all-in-one form the CLI uses (opens the browser itself).
+// Google OAuth login for antigravity. loginFlow() is the split begin/complete form core-auth's opencode oauth method drives; login() is the all-in-one form the CLI uses (opens the browser itself).
 
 import { spawn } from "child_process";
 import { startOAuthListener, addAccount } from "../../core-auth/dist/index.js";
@@ -45,8 +38,6 @@ function toCoreAccount(result) {
   return account;
 }
 
-// begin/complete form: authorize URL now, finish (capture code -> exchange ->
-// persist) when complete() is awaited. core-auth's opencode oauth method drives this.
 export async function loginFlow() {
   const authorization = await authorizeAntigravity();
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
@@ -71,7 +62,6 @@ export async function loginFlow() {
   };
 }
 
-// all-in-one form for the CLI: open the browser, then await completion
 export async function login(opts) {
   const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
   const flow = await loginFlow();
