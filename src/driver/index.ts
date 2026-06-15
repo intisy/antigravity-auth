@@ -146,8 +146,10 @@ async function handle(request, ctx) {
 export const driver = {
   id: PROVIDER_ID,
   label: "Antigravity",
-  opencodeProvider: PROVIDER_ID,
-  opencodeNpm: "@ai-sdk/anthropic",
+  // attach to the built-in "google" provider so OpenCode lists us under
+  // `auth login` (a custom provider id is not surfaced in the picker); this
+  // mirrors the original plugin's ANTIGRAVITY_PROVIDER_ID = "google".
+  opencodeProvider: "google",
   models,
   handle,
   login,
