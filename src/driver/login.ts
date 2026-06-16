@@ -2,7 +2,7 @@
 // Google OAuth login for antigravity. loginFlow() is the split begin/complete form core-auth's opencode oauth method drives; login() is the all-in-one form the CLI uses (opens the browser itself).
 
 import { spawn } from "child_process";
-import { startOAuthListener, addAccount } from "../../core-auth/dist/index.js";
+import { startOAuthListener, addAccount, proxyManager } from "../../core-auth/dist/index.js";
 import { authorizeAntigravity, exchangeAntigravity } from "../antigravity/oauth.js";
 import { parseRefreshParts } from "../plugin/auth.js";
 import { generateFingerprint } from "../plugin/fingerprint.js";
@@ -41,6 +41,9 @@ function toCoreAccount(result) {
 }
 
 export async function loginFlow() {
+  // bind a proxy to this new account up front so the token exchange + project
+  // discovery never touch Google from the server's own IP
+  const proxy = proxyManager.pickForLogin();
   const authorization = await authorizeAntigravity();
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
   return {
@@ -52,10 +55,11 @@ export async function loginFlow() {
         const code = callbackUrl.searchParams.get("code");
         const state = callbackUrl.searchParams.get("state");
         if (!code || !state) return null;
-        const result = await exchangeAntigravity(code, state);
+        const result = await exchangeAntigravity(code, state, { proxy });
         if (result.type !== "success") return null;
         const account = toCoreAccount(result);
         addAccount(PROVIDER_ID, account);
+        proxyManager.bindAccountProxy(account.id, proxy);
         return account;
       } finally {
         try { await listener.close(); } catch {}

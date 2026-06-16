@@ -121,6 +121,7 @@ export function invalidateProjectContextCache(refresh?: string): void {
 export async function loadManagedProject(
   accessToken: string,
   projectId?: string,
+  proxy?: string,
 ): Promise<LoadCodeAssistPayload | null> {
   const metadata = buildMetadata(projectId);
   const requestBody: Record<string, unknown> = { metadata };
@@ -144,8 +145,9 @@ export async function loadManagedProject(
         {
           method: "POST",
           headers: loadHeaders,
+          proxy,
           body: JSON.stringify(requestBody),
-        },
+        } as RequestInit & { proxy?: string },
       );
 
       if (!response.ok) {
@@ -172,6 +174,7 @@ export async function onboardManagedProject(
   projectId?: string,
   attempts = 10,
   delayMs = 5000,
+  proxy?: string,
 ): Promise<string | undefined> {
   const metadata = buildMetadata(projectId);
   const requestBody: Record<string, unknown> = {
@@ -186,13 +189,14 @@ export async function onboardManagedProject(
           `${baseEndpoint}/v1internal:onboardUser`,
           {
             method: "POST",
+            proxy,
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${accessToken}`,
               ...getAntigravityHeaders(),
             },
             body: JSON.stringify(requestBody),
-          },
+          } as RequestInit & { proxy?: string },
         );
 
         if (!response.ok) {
@@ -222,7 +226,11 @@ export async function onboardManagedProject(
 /**
  * Resolves an effective project ID for the current auth state, caching results per refresh token.
  */
-export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<ProjectContextResult> {
+export async function ensureProjectContext(
+  auth: OAuthAuthDetails,
+  options: { proxy?: string; fallbackProjectId?: string } = {},
+): Promise<ProjectContextResult> {
+  const proxy = options.proxy;
   const accessToken = auth.access;
   if (!accessToken) {
     return { auth, effectiveProjectId: "" };
@@ -246,7 +254,7 @@ export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<Proj
       return { auth, effectiveProjectId: parts.managedProjectId };
     }
 
-    const fallbackProjectId = ANTIGRAVITY_DEFAULT_PROJECT_ID;
+    const fallbackProjectId = options.fallbackProjectId || ANTIGRAVITY_DEFAULT_PROJECT_ID;
     const persistManagedProject = async (managedProjectId: string): Promise<ProjectContextResult> => {
       const updatedAuth: OAuthAuthDetails = {
         ...auth,
@@ -261,7 +269,7 @@ export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<Proj
     };
 
 
-    const loadPayload = await loadManagedProject(accessToken, parts.projectId ?? fallbackProjectId);
+    const loadPayload = await loadManagedProject(accessToken, parts.projectId ?? fallbackProjectId, proxy);
     const resolvedManagedProjectId = extractManagedProjectId(loadPayload);
 
     if (resolvedManagedProjectId) {
@@ -276,6 +284,9 @@ export async function ensureProjectContext(auth: OAuthAuthDetails): Promise<Proj
       accessToken,
       tierId,
       parts.projectId,
+      undefined,
+      undefined,
+      proxy,
     );
 
     if (provisionedProjectId) {

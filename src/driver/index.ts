@@ -5,7 +5,7 @@
 // reusing the existing plugin/request + plugin/project + plugin/transform code.
 
 import { defineProvider, AccountManager, proxyManager } from "../../core-auth/dist/index.js";
-import { prepareAntigravityRequest, transformAntigravityResponse } from "../plugin/request.js";
+import { prepareAntigravityRequest, transformAntigravityResponse, generateSyntheticProjectId } from "../plugin/request.js";
 import { ensureProjectContext } from "../plugin/project.js";
 import { formatRefreshParts, parseRefreshParts } from "../plugin/auth.js";
 import { ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_ENDPOINT_PROD } from "../constants.js";
@@ -55,18 +55,30 @@ function modelFromRequest(url, bodyText, ctxModel) {
   return "antigravity-auto";
 }
 
-async function resolveProjectId(account, access, log) {
+// a stable per-account project id, so accounts without a discovered managed
+// project never share the same x-goog-user-project (which would correlate them)
+function syntheticProjectFor(account) {
+  let synthetic = account.meta && account.meta.syntheticProjectId;
+  if (!synthetic) {
+    synthetic = generateSyntheticProjectId();
+    manager.mutate(account.id, (a) => { a.meta = a.meta || {}; a.meta.syntheticProjectId = synthetic; });
+  }
+  return synthetic;
+}
+
+async function resolveProjectId(account, access, log, proxy) {
   const meta = account.meta || {};
+  const fallbackProjectId = syntheticProjectFor(account);
   let projectId = meta.managedProjectId || meta.projectId || "";
   try {
-    const result = await ensureProjectContext(buildAuth(account, access));
+    const result = await ensureProjectContext(buildAuth(account, access), { proxy, fallbackProjectId });
     if (result && result.effectiveProjectId) projectId = result.effectiveProjectId;
     const discovered = parseRefreshParts(result.auth.refresh).managedProjectId;
     if (discovered && discovered !== meta.managedProjectId) {
       manager.mutate(account.id, (a) => { a.meta = a.meta || {}; a.meta.managedProjectId = discovered; });
     }
   } catch (error) { log("ensureProjectContext failed: " + error); }
-  return projectId;
+  return projectId || fallbackProjectId;
 }
 
 function errorResponse(status, message) {
@@ -92,8 +104,8 @@ async function handle(request, ctx) {
     const access = acquired.access;
     if (!access) { manager.reportError(account.id, attempt, "missing access token"); continue; }
 
-    const projectId = await resolveProjectId(account, access, log);
     const proxyUrl = proxyManager.selectForAccount(account.id);
+    const projectId = await resolveProjectId(account, access, log, proxyUrl);
 
     let rateLimited = false;
     for (const endpoint of endpointsFor(headerStyle)) {

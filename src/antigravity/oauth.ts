@@ -115,9 +115,11 @@ export async function authorizeAntigravity(projectId = ""): Promise<AntigravityA
 
 const FETCH_TIMEOUT_MS = 10000;
 
+type ProxyInit = RequestInit & { proxy?: string };
+
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit,
+  options: ProxyInit,
   timeoutMs = FETCH_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController();
@@ -129,7 +131,7 @@ async function fetchWithTimeout(
   }
 }
 
-async function fetchProjectID(accessToken: string): Promise<string> {
+async function fetchProjectID(accessToken: string, proxy?: string): Promise<string> {
   const errors: string[] = [];
   const loadHeaders: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
@@ -148,6 +150,7 @@ async function fetchProjectID(accessToken: string): Promise<string> {
       const response = await fetchWithTimeout(url, {
         method: "POST",
         headers: loadHeaders,
+        proxy,
         body: JSON.stringify({
           metadata: {
             ideType: "ANTIGRAVITY",
@@ -201,13 +204,16 @@ async function fetchProjectID(accessToken: string): Promise<string> {
 export async function exchangeAntigravity(
   code: string,
   state: string,
+  options: { proxy?: string } = {},
 ): Promise<AntigravityTokenExchangeResult> {
+  const proxy = options.proxy;
   try {
     const { verifier, projectId } = decodeState(state);
 
     const startTime = Date.now();
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
+      proxy,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "Accept": "*/*",
@@ -222,7 +228,7 @@ export async function exchangeAntigravity(
         redirect_uri: ANTIGRAVITY_REDIRECT_URI,
         code_verifier: verifier,
       }),
-    });
+    } as ProxyInit);
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
@@ -234,11 +240,12 @@ export async function exchangeAntigravity(
     const userInfoResponse = await fetch(
       "https://www.googleapis.com/oauth2/v1/userinfo?alt=json",
       {
+        proxy,
         headers: {
           Authorization: `Bearer ${tokenPayload.access_token}`,
           "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
         },
-      },
+      } as ProxyInit,
     );
 
     const userInfo = userInfoResponse.ok
@@ -252,7 +259,7 @@ export async function exchangeAntigravity(
 
     let effectiveProjectId = projectId;
     if (!effectiveProjectId) {
-      effectiveProjectId = await fetchProjectID(tokenPayload.access_token);
+      effectiveProjectId = await fetchProjectID(tokenPayload.access_token, proxy);
     }
 
     const storedRefresh = `${refreshToken}|${effectiveProjectId || ""}`;

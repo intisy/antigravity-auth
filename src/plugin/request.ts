@@ -703,7 +703,7 @@ export function getPluginSessionId(): string {
   return PLUGIN_SESSION_ID;
 }
 
-function generateSyntheticProjectId(): string {
+export function generateSyntheticProjectId(): string {
   const adjectives = ["useful", "bright", "swift", "calm", "bold"];
   const nouns = ["fuze", "wave", "spark", "flow", "core"];
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
