@@ -16,7 +16,9 @@ function tryOpenBrowser(url) {
     const platform = process.platform;
     const command = platform === "win32" ? "cmd" : platform === "darwin" ? "open" : "xdg-open";
     const args = platform === "win32" ? ["/c", "start", "", url] : [url];
-    spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    child.on("error", () => {});   // missing xdg-open/open emits an async error event, not a throw
+    child.unref();
   } catch {}
 }
 
