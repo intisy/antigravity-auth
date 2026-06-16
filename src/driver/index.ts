@@ -137,7 +137,8 @@ async function handle(request, ctx) {
 export const driver = {
   id: PROVIDER_ID,
   label: "Antigravity",
-  opencodeProvider: "google", // opencode's auth picker only lists built-in providers, not custom ids
+  opencodeProvider: "antigravity",
+  opencodeNpm: "@ai-sdk/google",   // matches the Gemini-format transform; keeps the real "google" provider free
   models,
   handle,
   login,
