@@ -12,6 +12,10 @@ import {
 } from "../constants";
 import { createLogger } from "../plugin/logger";
 import { calculateTokenExpiry } from "../plugin/auth";
+import { ensureAntigravityCredentials } from "./credentials";
+
+function clientId(): string { return process.env.ANTIGRAVITY_CLIENT_ID || ANTIGRAVITY_CLIENT_ID; }
+function clientSecret(): string { return process.env.ANTIGRAVITY_CLIENT_SECRET || ANTIGRAVITY_CLIENT_SECRET; }
 
 const log = createLogger("oauth");
 
@@ -90,10 +94,11 @@ function decodeState(state: string): AntigravityAuthState {
  * Build the Antigravity OAuth authorization URL including PKCE and optional project metadata.
  */
 export async function authorizeAntigravity(projectId = ""): Promise<AntigravityAuthorization> {
+  await ensureAntigravityCredentials();
   const pkce = (await generatePKCE()) as PkcePair;
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", ANTIGRAVITY_CLIENT_ID);
+  url.searchParams.set("client_id", clientId());
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", ANTIGRAVITY_REDIRECT_URI);
   url.searchParams.set("scope", ANTIGRAVITY_SCOPES.join(" "));
@@ -208,6 +213,7 @@ export async function exchangeAntigravity(
 ): Promise<AntigravityTokenExchangeResult> {
   const proxy = options.proxy;
   try {
+    await ensureAntigravityCredentials();
     const { verifier, projectId } = decodeState(state);
 
     const startTime = Date.now();
@@ -221,8 +227,8 @@ export async function exchangeAntigravity(
         "User-Agent": GEMINI_CLI_HEADERS["User-Agent"],
       },
       body: new URLSearchParams({
-        client_id: ANTIGRAVITY_CLIENT_ID,
-        client_secret: ANTIGRAVITY_CLIENT_SECRET,
+        client_id: clientId(),
+        client_secret: clientSecret(),
         code,
         grant_type: "authorization_code",
         redirect_uri: ANTIGRAVITY_REDIRECT_URI,

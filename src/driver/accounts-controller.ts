@@ -6,6 +6,7 @@
 import { accountControllerFromManager, proxyManager } from "../../core-auth/dist/index.js";
 import { ANTIGRAVITY_ENDPOINT_PROD, getAntigravityHeaders } from "../constants.js";
 import { generateSyntheticProjectId } from "../plugin/request.js";
+import { ensureAntigravityCredentials } from "../antigravity/credentials.js";
 import { login } from "./login.js";
 
 function out(message) { process.stdout.write(message + "\n"); }
@@ -32,6 +33,7 @@ function antigravityQuota(account) {
 async function verify(manager, view) {
   const name = view.email || view.id;
   try {
+    await ensureAntigravityCredentials();
     const access = await manager.ensureAccess(view.id);
     if (!access) { out("✗ " + name + ": no access token"); return; }
     const account = manager.list().find((a) => a.id === view.id);
@@ -60,7 +62,7 @@ async function verifyAll(manager) {
 
 async function refreshToken(manager, view) {
   const name = view.email || view.id;
-  try { out(await manager.refresh(view.id) ? "✓ refreshed " + name : "✗ no OAuth config / refresh token for " + name); }
+  try { await ensureAntigravityCredentials(); out(await manager.refresh(view.id) ? "✓ refreshed " + name : "✗ no OAuth config / refresh token for " + name); }
   catch (error) { out("✗ refresh failed for " + name + ": " + (error && error.message || error)); }
 }
 

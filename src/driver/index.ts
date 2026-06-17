@@ -6,6 +6,7 @@
 
 import { defineProvider, AccountManager, proxyManager } from "../../core-auth/dist/index.js";
 import { prepareAntigravityRequest, transformAntigravityResponse, generateSyntheticProjectId } from "../plugin/request.js";
+import { ensureAntigravityCredentials } from "../antigravity/credentials.js";
 import { ensureProjectContext } from "../plugin/project.js";
 import { formatRefreshParts, parseRefreshParts } from "../plugin/auth.js";
 import { ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_ENDPOINT_PROD } from "../constants.js";
@@ -87,6 +88,7 @@ function errorResponse(status, message) {
 
 async function handle(request, ctx) {
   const log = (ctx && ctx.log) || (() => {});
+  await ensureAntigravityCredentials();   // token refresh needs the client creds in env
 
   const url = request.url;
   let bodyText;
