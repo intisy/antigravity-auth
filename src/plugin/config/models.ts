@@ -39,29 +39,17 @@ const DEFAULT_MODALITIES: ModelModalities = {
 
 export const OPENCODE_MODEL_DEFINITIONS: OpencodeModelDefinitions = {
   "antigravity-auto": {
-    name: "Antigravity Auto",
-    limit: { context: 200000, output: 65535 },
+    name: "Auto",
+    limit: { context: 1048576, output: 65535 },
     modalities: DEFAULT_MODALITIES,
-  },
-  "antigravity-auto-best": {
-    name: "Antigravity Auto (Best)",
-    limit: { context: 200000, output: 65535 },
-    modalities: DEFAULT_MODALITIES,
-  },
-  "antigravity-auto-high": {
-    name: "Antigravity Auto (High)",
-    limit: { context: 200000, output: 65535 },
-    modalities: DEFAULT_MODALITIES,
-  },
-  "antigravity-auto-balanced": {
-    name: "Antigravity Auto (Balanced)",
-    limit: { context: 200000, output: 65535 },
-    modalities: DEFAULT_MODALITIES,
-  },
-  "antigravity-auto-fastest": {
-    name: "Antigravity Auto (Fastest)",
-    limit: { context: 200000, output: 65535 },
-    modalities: DEFAULT_MODALITIES,
+    // Routes to the flagship model (gemini-3.1-pro); the default has no suffix,
+    // the thinking level is selectable like Gemini 3 Flash.
+    variants: {
+      minimal: { thinkingLevel: "minimal" },
+      low: { thinkingLevel: "low" },
+      medium: { thinkingLevel: "medium" },
+      high: { thinkingLevel: "high" },
+    },
   },
   "antigravity-gemini-3.1-pro": {
     name: "Gemini 3.1 Pro (Antigravity)",

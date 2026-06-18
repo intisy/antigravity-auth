@@ -38,26 +38,6 @@
         "handler": "dist/handler.js",
         "models": [
           {
-            "id": "antigravity-auto",
-            "name": "Antigravity Auto"
-          },
-          {
-            "id": "antigravity-auto-best",
-            "name": "Antigravity Auto (Best)"
-          },
-          {
-            "id": "antigravity-auto-high",
-            "name": "Antigravity Auto (High)"
-          },
-          {
-            "id": "antigravity-auto-balanced",
-            "name": "Antigravity Auto (Balanced)"
-          },
-          {
-            "id": "antigravity-auto-fastest",
-            "name": "Antigravity Auto (Fastest)"
-          },
-          {
             "id": "antigravity-gemini-3.1-pro",
             "name": "Gemini 3.1 Pro (Antigravity)"
           },
