@@ -138,17 +138,22 @@ export async function loadManagedProject(
     new Set<string>([...ANTIGRAVITY_LOAD_ENDPOINTS, ...ANTIGRAVITY_ENDPOINT_FALLBACKS]),
   );
 
+  const url = (base: string) => `${base}/v1internal:loadCodeAssist`;
+  const baseInit = { method: "POST", headers: loadHeaders, body: JSON.stringify(requestBody) };
+
   for (const baseEndpoint of loadEndpoints) {
     try {
-      const response = await fetch(
-        `${baseEndpoint}/v1internal:loadCodeAssist`,
-        {
-          method: "POST",
-          headers: loadHeaders,
-          proxy,
-          body: JSON.stringify(requestBody),
-        } as RequestInit & { proxy?: string },
-      );
+      let response: Response;
+      try {
+        response = await fetch(url(baseEndpoint), { ...baseInit, proxy } as RequestInit & { proxy?: string });
+      } catch (proxyError) {
+        // A dead proxy gives no isolation anyway; without a direct retry,
+        // project discovery silently fails and a synthetic (invalid) project id
+        // gets sent to the API, which then returns 403 "no valid license".
+        if (!proxy) throw proxyError;
+        log.debug("loadCodeAssist via proxy failed, retrying directly", { endpoint: baseEndpoint, error: String(proxyError) });
+        response = await fetch(url(baseEndpoint), baseInit as RequestInit);
+      }
 
       if (!response.ok) {
         continue;
@@ -185,19 +190,23 @@ export async function onboardManagedProject(
   for (const baseEndpoint of ANTIGRAVITY_ENDPOINT_FALLBACKS) {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
-        const response = await fetch(
-          `${baseEndpoint}/v1internal:onboardUser`,
-          {
-            method: "POST",
-            proxy,
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
-              ...getAntigravityHeaders(),
-            },
-            body: JSON.stringify(requestBody),
-          } as RequestInit & { proxy?: string },
-        );
+        const onboardInit = {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            ...getAntigravityHeaders(),
+          },
+          body: JSON.stringify(requestBody),
+        };
+        let response: Response;
+        try {
+          response = await fetch(`${baseEndpoint}/v1internal:onboardUser`, { ...onboardInit, proxy } as RequestInit & { proxy?: string });
+        } catch (proxyError) {
+          if (!proxy) throw proxyError;
+          log.debug("onboardUser via proxy failed, retrying directly", { endpoint: baseEndpoint, error: String(proxyError) });
+          response = await fetch(`${baseEndpoint}/v1internal:onboardUser`, onboardInit as RequestInit);
+        }
 
         if (!response.ok) {
           break;
