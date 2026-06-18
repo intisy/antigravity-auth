@@ -76,9 +76,11 @@ export async function loginFlow() {
   return {
     url: authorization.url,
     instructions: "Sign in with Google; the terminal continues automatically, or paste the redirect URL / code if the browser can't reach this machine.",
-    complete: async () => {
+    complete: async (input) => {
       try {
-        const cb = await awaitCallback(listener);
+        // opencode (method "code") passes the pasted code / redirect URL; the CLI
+        // passes nothing and we race the loopback listener against a terminal paste.
+        const cb = input ? parsePastedCallback(input) : await awaitCallback(listener);
         if (!cb || !cb.code) return null;
         // a pasted bare code has no state; rebuild it from this flow's own verifier
         const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
