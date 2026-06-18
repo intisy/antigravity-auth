@@ -2,14 +2,41 @@
 // Google OAuth login for antigravity. loginFlow() is the split begin/complete form core-auth's opencode oauth method drives; login() is the all-in-one form the CLI uses (opens the browser itself).
 
 import { spawn } from "child_process";
-import { startOAuthListener, addAccount, proxyManager } from "../../core-auth/dist/index.js";
-import { authorizeAntigravity, exchangeAntigravity } from "../antigravity/oauth.js";
+import { createInterface } from "node:readline";
+import { startOAuthListener, addAccount, proxyManager, isTTY } from "../../core-auth/dist/index.js";
+import { authorizeAntigravity, exchangeAntigravity, encodeState } from "../antigravity/oauth.js";
 import { parseRefreshParts } from "../plugin/auth.js";
 import { generateFingerprint } from "../plugin/fingerprint.js";
 import { ANTIGRAVITY_REDIRECT_URI } from "../constants.js";
 
 const PROVIDER_ID = "antigravity";
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+
+// accept either the full redirect URL (code + state) or a bare code pasted alone
+function parsePastedCallback(input) {
+  const text = (input || "").trim();
+  if (!text) return null;
+  const codeMatch = text.match(/[?&]code=([^&\s]+)/);
+  if (codeMatch) {
+    const stateMatch = text.match(/[?&]state=([^&\s]+)/);
+    return { code: decodeURIComponent(codeMatch[1]), state: stateMatch ? decodeURIComponent(stateMatch[1]) : null };
+  }
+  return { code: text, state: null };
+}
+
+// the loopback listener only fires when the browser can reach this host's localhost
+// (not the case in a container), so race it against a manual paste of the URL/code
+function awaitCallback(listener) {
+  const auto = listener.waitForCallback()
+    .then((url) => ({ code: url.searchParams.get("code"), state: url.searchParams.get("state") }))
+    .catch(() => null);
+  if (!isTTY()) return auto;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const pasted = new Promise((resolve) => {
+    rl.question("…or paste the redirect URL / code here, then Enter: ", (answer) => resolve(parsePastedCallback(answer)));
+  });
+  return Promise.race([auto, pasted]).finally(() => { try { rl.close(); } catch {} });
+}
 
 function tryOpenBrowser(url) {
   try {
@@ -48,14 +75,14 @@ export async function loginFlow() {
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
   return {
     url: authorization.url,
-    instructions: "Sign in with Google in your browser; the terminal continues automatically.",
+    instructions: "Sign in with Google; the terminal continues automatically, or paste the redirect URL / code if the browser can't reach this machine.",
     complete: async () => {
       try {
-        const callbackUrl = await listener.waitForCallback();
-        const code = callbackUrl.searchParams.get("code");
-        const state = callbackUrl.searchParams.get("state");
-        if (!code || !state) return null;
-        const result = await exchangeAntigravity(code, state, { proxy });
+        const cb = await awaitCallback(listener);
+        if (!cb || !cb.code) return null;
+        // a pasted bare code has no state; rebuild it from this flow's own verifier
+        const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
+        const result = await exchangeAntigravity(cb.code, state, { proxy });
         if (result.type !== "success") return null;
         const account = toCoreAccount(result);
         addAccount(PROVIDER_ID, account);
@@ -71,7 +98,7 @@ export async function loginFlow() {
 export async function login(opts) {
   const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
   const flow = await loginFlow();
-  log("Open this URL in your browser to authenticate with Google:\n\n  " + flow.url + "\n");
+  log("Open this URL in your browser to authenticate with Google:\n\n  " + flow.url + "\n\nAfter approving, you'll be redirected to a localhost page. If it doesn't complete automatically (e.g. in a container), copy that page's URL and paste it below.\n");
   tryOpenBrowser(flow.url);
   const account = await flow.complete();
   if (!account) throw new Error("login failed");

@@ -65,7 +65,7 @@ interface AntigravityUserInfo {
 /**
  * Encode an object into a URL-safe base64 string.
  */
-function encodeState(payload: AntigravityAuthState): string {
+export function encodeState(payload: AntigravityAuthState): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
