@@ -18,13 +18,11 @@ const AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export function clientId() { return process.env.ANTIGRAVITY_CLIENT_ID || ANTIGRAVITY_CLIENT_ID; }
 export function clientSecret() { return process.env.ANTIGRAVITY_CLIENT_SECRET || ANTIGRAVITY_CLIENT_SECRET; }
 
-// getters, not values: creds are fetched into process.env on first use, which can
-// happen after this object is built, so refresh must read them lazily
 export function oauthConfig() {
   return {
     tokenUrl: TOKEN_URL,
-    get clientId() { return clientId(); },
-    get clientSecret() { return clientSecret(); },
+    clientId: clientId(),
+    clientSecret: clientSecret(),
   };
 }
 

@@ -1,12 +1,11 @@
 /**
  * Constants used for Antigravity OAuth flows and Cloud Code Assist API integration.
- * The client id/secret are NOT committed here — they are Antigravity's own public
- * installed-app credentials, fetched at runtime from the public npm mirror (see
- * antigravity/credentials.ts) into process.env. These placeholders are the
- * last-resort fallback when env is unset and the fetch is unavailable.
  */
 export const ANTIGRAVITY_CLIENT_ID = process.env.ANTIGRAVITY_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID";
 
+/**
+ * Client secret issued for the Antigravity OAuth application.
+ */
 export const ANTIGRAVITY_CLIENT_SECRET = process.env.ANTIGRAVITY_CLIENT_SECRET || "YOUR_GOOGLE_CLIENT_SECRET";
 
 /**
