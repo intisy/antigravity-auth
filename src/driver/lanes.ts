@@ -16,9 +16,18 @@ function isGeminiCliModel(model) {
   return typeof model === "string" && model.startsWith("gemini-");
 }
 
+// Partition rate-limit state by REAL quota pool so exhausting one family never
+// blocks another: claude | gemini-pro | gemini-flash | gpt-oss | gemini-cli.
+// Bare gemini-* ids are the separate (Gemini CLI) free pool; antigravity-*
+// (and everything else) split by family.
 export function laneFor(model) {
-  if (getModelFamily(model || "") === "claude") return "claude";
-  return isGeminiCliModel(model) ? "gemini-cli" : "gemini-antigravity";
+  const raw = String(model || "");
+  if (isGeminiCliModel(raw)) return "gemini-cli";
+  const lower = raw.replace(/^antigravity-/i, "").toLowerCase();
+  if (lower.includes("claude")) return "claude";
+  if (lower.includes("gpt")) return "gpt-oss";
+  if (lower.includes("flash")) return "gemini-flash";
+  return "gemini-pro";
 }
 
 export function headerStyleFor(model) {

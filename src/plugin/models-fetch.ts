@@ -83,6 +83,17 @@ function rankedAgentModelIds(payload: FetchAvailableModelsPayload): string[] {
   return ids;
 }
 
+// The separate Gemini CLI free quota pool (bare ids -> gemini-cli lane/headers).
+// These are stable public Gemini models and aren't in the antigravity agent
+// ranking, so they're listed as their own labeled group.
+const GEMINI_CLI_MODELS: Array<{ id: string; name: string; context: number; output: number }> = [
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Gemini CLI)", context: 1048576, output: 65536 },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro (Gemini CLI)", context: 1048576, output: 65536 },
+  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview (Gemini CLI)", context: 1048576, output: 65536 },
+  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview (Gemini CLI)", context: 1048576, output: 65535 },
+  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview (Gemini CLI)", context: 1048576, output: 65535 },
+];
+
 function buildModelEntry(rawId: string, info: FetchedModelInfo): OpencodeModelDefinition {
   return {
     name: (info.displayName || rawId) + " (Antigravity)",
@@ -124,6 +135,14 @@ export function buildAntigravityCatalog(payload: FetchAvailableModelsPayload): A
   };
   for (const rawId of ranked) {
     catalog[MODEL_ID_PREFIX + rawId] = buildModelEntry(rawId, models[rawId]!);
+  }
+  // Gemini CLI quota pool (bare ids, distinct lane) — a second free pool.
+  for (const cli of GEMINI_CLI_MODELS) {
+    catalog[cli.id] = {
+      name: cli.name,
+      limit: { context: cli.context, output: cli.output },
+      modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+    };
   }
 
   const defaultModelId =
