@@ -4,7 +4,7 @@
 // driver owns only the antigravity-specific request transform + endpoint dispatch,
 // reusing the existing plugin/request + plugin/project + plugin/transform code.
 
-import { defineProvider, AccountManager, proxyManager } from "../../core-auth/dist/index.js";
+import { defineProvider, AccountManager, proxyManager, getAutoCandidates } from "../../core-auth/dist/index.js";
 import { prepareAntigravityRequest, transformAntigravityResponse, generateSyntheticProjectId } from "../plugin/request.js";
 import { ensureProjectContext } from "../plugin/project.js";
 import { fetchAvailableModels, buildAntigravityCatalog } from "../plugin/models-fetch.js";
@@ -86,17 +86,12 @@ function errorResponse(status, message) {
   return new Response(JSON.stringify({ error: { message } }), { status, headers: { "content-type": "application/json" } });
 }
 
-async function handle(request, ctx) {
-  const log = (ctx && ctx.log) || (() => {});
-
-  const url = request.url;
-  let bodyText;
-  try { bodyText = await request.clone().text(); } catch { bodyText = undefined; }
-  const model = modelFromRequest(url, bodyText, ctx && ctx.model);
+// Run one model through the account/endpoint attempt loop. Returns the upstream
+// response (transformed on success); a rate-limit status means "all accounts for
+// this model's lane are spent" so the Auto caller can fall through to the next.
+async function attemptModel(model, url, init, ctx, log) {
   const lane = laneFor(model);
   const headerStyle = headerStyleFor(model);
-  const init = { method: request.method, headers: Object.fromEntries(request.headers), body: bodyText };
-
   let lastResponse = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const acquired = await manager.acquire(lane);
@@ -173,6 +168,42 @@ async function handle(request, ctx) {
     if (!rateLimited) break;
   }
   return lastResponse || errorResponse(502, "antigravity request failed after " + MAX_ATTEMPTS + " attempts");
+}
+
+function isAutoModel(model) {
+  const stripped = String(model || "").replace(/^antigravity-/i, "");
+  return stripped === "auto" || stripped.startsWith("auto-");
+}
+
+function rewriteModelInUrl(url, model) {
+  return String(url).replace(/\/models\/[^:/?]+/, "/models/" + model);
+}
+
+async function handle(request, ctx) {
+  const log = (ctx && ctx.log) || (() => {});
+  const url = request.url;
+  let bodyText;
+  try { bodyText = await request.clone().text(); } catch { bodyText = undefined; }
+  const requestedModel = modelFromRequest(url, bodyText, ctx && ctx.model);
+  const init = { method: request.method, headers: Object.fromEntries(request.headers), body: bodyText };
+
+  // Auto: walk the user-ranked candidate models, falling through to the next when
+  // one is rate-limited (smart fallback). Non-auto models run exactly once.
+  let candidates = [requestedModel];
+  if (isAutoModel(requestedModel)) {
+    const ranked = getAutoCandidates(PROVIDER_ID).map((id) => "antigravity-" + id);
+    if (ranked.length) candidates = ranked;
+  }
+
+  let lastResponse = null;
+  for (const model of candidates) {
+    const candidateUrl = candidates.length > 1 ? rewriteModelInUrl(url, model) : url;
+    const response = await attemptModel(model, candidateUrl, init, ctx, log);
+    lastResponse = response;
+    if (!response || !isRateLimitStatus(response.status)) return response;   // success / non-retryable
+    if (candidates.length > 1) log("auto: " + model + " rate-limited (" + response.status + "); trying next candidate");
+  }
+  return lastResponse || errorResponse(502, "all antigravity Auto candidates exhausted");
 }
 
 // Live model discovery for core-auth: pick the first usable account, fetch the
