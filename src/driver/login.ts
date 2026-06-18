@@ -33,7 +33,7 @@ function awaitCallback(listener) {
   if (!isTTY()) return auto;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const pasted = new Promise((resolve) => {
-    rl.question("…or paste the redirect URL / code here, then Enter: ", (answer) => resolve(parsePastedCallback(answer)));
+    rl.question("Paste the full redirect URL from your browser's address bar (or just the code) here, then press Enter: ", (answer) => resolve(parsePastedCallback(answer)));
   });
   return Promise.race([auto, pasted]).finally(() => { try { rl.close(); } catch {} });
 }
@@ -75,7 +75,7 @@ export async function loginFlow() {
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
   return {
     url: authorization.url,
-    instructions: "Sign in with Google; the terminal continues automatically, or paste the redirect URL / code if the browser can't reach this machine.",
+    instructions: "Sign in with Google. In a container the localhost redirect won't load — copy the full URL from your browser's address bar (or just the code) and paste it here.",
     complete: async (input) => {
       try {
         // opencode (method "code") passes the pasted code / redirect URL; the CLI
@@ -85,7 +85,10 @@ export async function loginFlow() {
         // a pasted bare code has no state; rebuild it from this flow's own verifier
         const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
         const result = await exchangeAntigravity(cb.code, state, { proxy });
-        if (result.type !== "success") return null;
+        if (result.type !== "success") {
+          process.stderr.write("antigravity login failed — token exchange error: " + (result.error || "unknown") + "\n");
+          return null;
+        }
         const account = toCoreAccount(result);
         addAccount(PROVIDER_ID, account);
         proxyManager.bindAccountProxy(account.id, proxy);
@@ -100,7 +103,7 @@ export async function loginFlow() {
 export async function login(opts) {
   const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
   const flow = await loginFlow();
-  log("Open this URL in your browser to authenticate with Google:\n\n  " + flow.url + "\n\nAfter approving, you'll be redirected to a localhost page. If it doesn't complete automatically (e.g. in a container), copy that page's URL and paste it below.\n");
+  log("Open this URL in your browser to sign in with Google:\n\n  " + flow.url + "\n\nAfter approving, your browser will try to open a localhost page. In a container it won't load — that's expected. Copy the full URL from your browser's address bar and paste it below.\n");
   tryOpenBrowser(flow.url);
   const account = await flow.complete();
   if (!account) throw new Error("login failed");
