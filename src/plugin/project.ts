@@ -13,9 +13,22 @@ const log = createLogger("project");
 const projectContextResultCache = new Map<string, ProjectContextResult>();
 const projectContextPendingCache = new Map<string, Promise<ProjectContextResult>>();
 
+// The loadCodeAssist/onboardUser request body validates metadata.platform
+// against ClientMetadata.Platform — "WINDOWS"/"MACOS" are NOT valid enum values
+// (they 400 the request); it must be e.g. LINUX_AMD64 / DARWIN_ARM64 / WINDOWS_AMD64.
+function detectCodeAssistPlatform(): string {
+  const arch = process.arch === "arm64" ? "ARM64" : "AMD64";
+  switch (process.platform) {
+    case "win32": return `WINDOWS_${arch}`;
+    case "darwin": return `DARWIN_${arch}`;
+    case "linux": return `LINUX_${arch}`;
+    default: return "PLATFORM_UNSPECIFIED";
+  }
+}
+
 const CODE_ASSIST_METADATA = {
   ideType: "ANTIGRAVITY",
-  platform: process.platform === "win32" ? "WINDOWS" : "MACOS",
+  platform: detectCodeAssistPlatform(),
   pluginType: "GEMINI",
 } as const;
 
