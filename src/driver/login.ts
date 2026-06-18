@@ -2,6 +2,9 @@
 // Google OAuth login for antigravity. loginFlow() is the split begin/complete form core-auth's opencode oauth method drives; login() is the all-in-one form the CLI uses (opens the browser itself).
 
 import { spawn } from "child_process";
+import { appendFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { createInterface } from "node:readline";
 import { startOAuthListener, addAccount, proxyManager, isTTY } from "../../core-auth/dist/index.js";
 import { authorizeAntigravity, exchangeAntigravity, encodeState } from "../antigravity/oauth.js";
@@ -11,6 +14,16 @@ import { ANTIGRAVITY_REDIRECT_URI } from "../constants.js";
 
 const PROVIDER_ID = "antigravity";
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Unconditional trace to a fixed file — the account-menu TUI clears the screen on
+// every redraw, so stderr/errors from login() never stay visible. Read it with:
+//   cat ~/.config/opencode/antigravity-login.log
+function dbg(message) {
+  try {
+    const base = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+    appendFileSync(join(base, "opencode", "antigravity-login.log"), "[" + new Date().toISOString() + "] " + message + "\n");
+  } catch {}
+}
 
 // accept either the full redirect URL (code + state) or a bare code pasted alone
 function parsePastedCallback(input) {
@@ -28,12 +41,12 @@ function parsePastedCallback(input) {
 // (not the case in a container), so race it against a manual paste of the URL/code
 function awaitCallback(listener) {
   const auto = listener.waitForCallback()
-    .then((url) => ({ code: url.searchParams.get("code"), state: url.searchParams.get("state") }))
-    .catch(() => null);
-  if (!isTTY()) return auto;
+    .then((url) => { dbg("awaitCallback: loopback listener fired"); return { code: url.searchParams.get("code"), state: url.searchParams.get("state") }; })
+    .catch((e) => { dbg("awaitCallback: listener rejected/closed: " + (e && e.message || e)); return null; });
+  if (!isTTY()) { dbg("awaitCallback: not a TTY — paste prompt unavailable, waiting on loopback only"); return auto; }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const pasted = new Promise((resolve) => {
-    rl.question("Paste the full redirect URL from your browser's address bar (or just the code) here, then press Enter: ", (answer) => resolve(parsePastedCallback(answer)));
+    rl.question("Paste the full redirect URL from your browser's address bar (or just the code) here, then press Enter: ", (answer) => { dbg("awaitCallback: pasted answer length=" + (answer ? answer.trim().length : 0)); resolve(parsePastedCallback(answer)); });
   });
   return Promise.race([auto, pasted]).finally(() => { try { rl.close(); } catch {} });
 }
@@ -78,21 +91,28 @@ export async function loginFlow() {
     instructions: "Sign in with Google. In a container the localhost redirect won't load — copy the full URL from your browser's address bar (or just the code) and paste it here.",
     complete: async (input) => {
       try {
+        dbg("complete: invoked (input " + (input ? "provided len=" + String(input).trim().length : "absent, awaiting callback") + ", proxy=" + (proxy || "none") + ")");
         // opencode (method "code") passes the pasted code / redirect URL; the CLI
         // passes nothing and we race the loopback listener against a terminal paste.
         const cb = input ? parsePastedCallback(input) : await awaitCallback(listener);
-        if (!cb || !cb.code) return null;
+        dbg("complete: parsed callback — code=" + (cb && cb.code ? "present(len " + cb.code.length + ")" : "MISSING") + ", state=" + (cb && cb.state ? "present" : "absent"));
+        if (!cb || !cb.code) { dbg("complete: no code -> returning null (0 accounts)"); return null; }
         // a pasted bare code has no state; rebuild it from this flow's own verifier
         const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
         const result = await exchangeAntigravity(cb.code, state, { proxy });
+        dbg("complete: token exchange -> " + result.type + (result.type !== "success" ? " | error: " + (result.error || "unknown") : " | email: " + (result.email || "?")));
         if (result.type !== "success") {
           process.stderr.write("antigravity login failed — token exchange error: " + (result.error || "unknown") + "\n");
           return null;
         }
         const account = toCoreAccount(result);
         addAccount(PROVIDER_ID, account);
+        dbg("complete: addAccount done id=" + account.id + " -> account should now appear in the list");
         proxyManager.bindAccountProxy(account.id, proxy);
         return account;
+      } catch (error) {
+        dbg("complete: THREW " + (error && error.stack || error));
+        throw error;
       } finally {
         try { await listener.close(); } catch {}
       }
