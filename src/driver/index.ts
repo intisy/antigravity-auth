@@ -136,6 +136,12 @@ async function handle(request, ctx) {
       }
       if (proxyOk) proxyManager.reportResult(proxyUrl, true, Date.now() - started);
 
+      if (!response.ok) {
+        let snippet = "";
+        try { snippet = (await response.clone().text()).slice(0, 300); } catch {}
+        log("antigravity response " + response.status + " from " + endpoint + (snippet ? " body: " + snippet : ""));
+      }
+
       if (isRateLimitStatus(response.status)) {
         rateLimited = true;
         lastResponse = response;
