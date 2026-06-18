@@ -186,10 +186,11 @@ export function resolveModelWithTier(requestedModel: string, options: ModelResol
   
   let antigravityModel = modelWithoutQuota;
   if (skipAlias) {
+    // Model ids now come from the live catalog and are already exact API names
+    // (e.g. gemini-3.5-flash-low), so never rewrite the tail. Only add a default
+    // tier to a bare gemini-3 pro id, which the API won't accept without one.
     if (isGemini3Pro && !tier && !isImageModel) {
       antigravityModel = `${modelWithoutQuota}-low`;
-    } else if (isGemini3Flash && tier) {
-      antigravityModel = baseName;
     }
   }
 

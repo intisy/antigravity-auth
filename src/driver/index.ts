@@ -7,6 +7,7 @@
 import { defineProvider, AccountManager, proxyManager } from "../../core-auth/dist/index.js";
 import { prepareAntigravityRequest, transformAntigravityResponse, generateSyntheticProjectId } from "../plugin/request.js";
 import { ensureProjectContext } from "../plugin/project.js";
+import { fetchAvailableModels, buildAntigravityCatalog } from "../plugin/models-fetch.js";
 import { formatRefreshParts, parseRefreshParts } from "../plugin/auth.js";
 import { ANTIGRAVITY_ENDPOINT_FALLBACKS, ANTIGRAVITY_ENDPOINT_PROD } from "../constants.js";
 import { models } from "./models.js";
@@ -174,12 +175,31 @@ async function handle(request, ctx) {
   return lastResponse || errorResponse(502, "antigravity request failed after " + MAX_ATTEMPTS + " attempts");
 }
 
+// Live model discovery for core-auth: pick the first usable account, fetch the
+// account's real available models, and build the catalog (+ ranking/default for
+// Auto). Returns null when no account exists or the fetch fails -> core-auth then
+// falls back to the cache (or an empty catalog before first login).
+async function fetchModels(ctx) {
+  const log = (ctx && ctx.log) || (() => {});
+  const account = manager.list().find((a) => a.enabled !== false && a.refresh);
+  if (!account) return null;
+  let access;
+  try { access = await manager.ensureAccess(account.id); } catch (error) { log("fetchModels token refresh failed: " + error); return null; }
+  if (!access) return null;
+  const proxyUrl = proxyManager.selectForAccount(account.id);
+  const projectId = await resolveProjectId(account, access, log, proxyUrl);
+  const payload = await fetchAvailableModels(access, projectId, proxyUrl, log);
+  if (!payload) return null;
+  return buildAntigravityCatalog(payload);
+}
+
 export const driver = {
   id: PROVIDER_ID,
   label: "Antigravity",
   opencodeProvider: "antigravity",
   opencodeNpm: "@ai-sdk/google",   // matches the Gemini-format transform; keeps the real "google" provider free
   models,
+  fetchModels,
   handle,
   login,
   loginFlow,
