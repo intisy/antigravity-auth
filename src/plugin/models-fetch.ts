@@ -26,9 +26,9 @@ interface FetchAvailableModelsPayload {
 
 export interface AntigravityCatalog {
   models: OpencodeModelDefinitions;
-  /** Agent models in the API's recommended order (raw ids, no prefix) — Auto ranking source. */
+  /** Agent models in recommended order, as FULL catalog ids — Auto ranking source. */
   ranking: string[];
-  /** The API's default agent model id (raw, no prefix). */
+  /** The default agent model, as a full catalog id. */
   defaultModelId?: string;
 }
 
@@ -87,11 +87,11 @@ function rankedAgentModelIds(payload: FetchAvailableModelsPayload): string[] {
 // These are stable public Gemini models and aren't in the antigravity agent
 // ranking, so they're listed as their own labeled group.
 const GEMINI_CLI_MODELS: Array<{ id: string; name: string; context: number; output: number }> = [
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (Gemini CLI)", context: 1048576, output: 65536 },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro (Gemini CLI)", context: 1048576, output: 65536 },
-  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview (Gemini CLI)", context: 1048576, output: 65536 },
-  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview (Gemini CLI)", context: 1048576, output: 65535 },
-  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview (Gemini CLI)", context: 1048576, output: 65535 },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", context: 1048576, output: 65536 },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", context: 1048576, output: 65536 },
+  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview", context: 1048576, output: 65536 },
+  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview", context: 1048576, output: 65535 },
+  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", context: 1048576, output: 65535 },
 ];
 
 function buildModelEntry(rawId: string, info: FetchedModelInfo): OpencodeModelDefinition {
@@ -136,19 +136,27 @@ export function buildAntigravityCatalog(payload: FetchAvailableModelsPayload): A
   for (const rawId of ranked) {
     catalog[MODEL_ID_PREFIX + rawId] = buildModelEntry(rawId, models[rawId]!);
   }
-  // Gemini CLI quota pool (bare ids, distinct lane) — a second free pool.
+  // Gemini CLI quota pool (bare ids, distinct lane) — a second free pool. The
+  // group label is what the loader's Providers tab shows verbatim (provider-defined).
   for (const cli of GEMINI_CLI_MODELS) {
     catalog[cli.id] = {
       name: cli.name,
       limit: { context: cli.context, output: cli.output },
       modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+      group: "Gemini CLI · separate free pool (not in Auto)",
     };
   }
 
-  const defaultModelId =
+  const defaultRaw =
     payload.defaultAgentModelId && ranked.includes(payload.defaultAgentModelId)
       ? payload.defaultAgentModelId
       : ranked[0];
 
-  return { models: catalog, ranking: ranked, defaultModelId };
+  // ranking/default use the FULL catalog ids (same keys as `models` + the request
+  // model id) so consumers (loader tab, Auto router) never need a provider prefix.
+  return {
+    models: catalog,
+    ranking: ranked.map((id) => MODEL_ID_PREFIX + id),
+    defaultModelId: defaultRaw ? MODEL_ID_PREFIX + defaultRaw : undefined,
+  };
 }

@@ -208,7 +208,7 @@ async function handle(request, ctx) {
   // one is rate-limited (smart fallback). Non-auto models run exactly once.
   let candidates = [requestedModel];
   if (isAutoModel(requestedModel)) {
-    const ranked = getAutoCandidates(PROVIDER_ID).map((id) => "antigravity-" + id);
+    const ranked = getAutoCandidates(PROVIDER_ID);   // full catalog ids (already prefixed)
     if (ranked.length) candidates = ranked;
   }
 

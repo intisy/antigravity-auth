@@ -28,6 +28,9 @@ export interface OpencodeModelDefinition extends ProviderModel {
   limit: ModelLimit;
   modalities: ModelModalities;
   variants?: Record<string, ModelVariant>;
+  // optional provider-defined grouping label, shown verbatim by the loader's
+  // Providers tab for models that aren't part of Auto (e.g. a separate quota pool)
+  group?: string;
 }
 
 export type OpencodeModelDefinitions = Record<string, OpencodeModelDefinition>;
