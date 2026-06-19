@@ -44,20 +44,6 @@ function parsePastedCallback(input) {
   return { code: text, state: null };
 }
 
-// the loopback listener only fires when the browser can reach this host's localhost
-// (not the case in a container), so race it against a manual paste of the URL/code
-function awaitCallback(listener) {
-  const auto = listener.waitForCallback()
-    .then((url) => { dbg("awaitCallback: loopback listener fired"); return { code: url.searchParams.get("code"), state: url.searchParams.get("state") }; })
-    .catch((e) => { dbg("awaitCallback: listener rejected/closed: " + (e && e.message || e)); return null; });
-  if (!isTTY()) { dbg("awaitCallback: not a TTY — paste prompt unavailable, waiting on loopback only"); return auto; }
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const pasted = new Promise((resolve) => {
-    rl.question("Paste the full redirect URL from your browser's address bar (or just the code) here, then press Enter: ", (answer) => { dbg("awaitCallback: pasted answer length=" + (answer ? answer.trim().length : 0)); resolve(parsePastedCallback(answer)); });
-  });
-  return Promise.race([auto, pasted]).finally(() => { try { rl.close(); } catch {} });
-}
-
 function tryOpenBrowser(url) {
   try {
     const platform = process.platform;
@@ -93,57 +79,77 @@ export async function loginFlow() {
   const proxy = proxyManager.pickForLogin();
   const authorization = await authorizeAntigravity();
   const listener = await startOAuthListener(ANTIGRAVITY_REDIRECT_URI, { timeoutMs: LOGIN_TIMEOUT_MS });
+  let settled = false;
+  const closeListener = () => { try { listener.close(); } catch {} };
+
+  // shared finisher for both paths (pasted code + loopback callback): exchange the
+  // code, save the account, bind its proxy. Guarded so only the first path wins.
+  const finish = async (cb) => {
+    if (settled) return null;
+    if (!cb || !cb.code) { dbg("finish: no code -> returning null"); return null; }
+    settled = true;
+    try {
+      // a pasted bare code has no state; rebuild it from this flow's own verifier
+      const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
+      let boundProxy = proxy;
+      let result = await exchangeAntigravity(cb.code, state, { proxy });
+      // A dead/unreachable login proxy bricks the token exchange (the request never
+      // reaches Google, so the auth code is NOT consumed). Retry directly — a
+      // non-working proxy provides no isolation anyway — and then DON'T bind it.
+      if (result.type !== "success" && proxy && isConnectError(result.error)) {
+        dbg("finish: proxied exchange could not connect via " + proxy + " — retrying directly");
+        process.stderr.write("antigravity: login proxy " + proxy + " unreachable — retrying token exchange without a proxy.\n");
+        boundProxy = null;
+        result = await exchangeAntigravity(cb.code, state, {});
+      }
+      dbg("finish: token exchange -> " + result.type + (result.type !== "success" ? " | error: " + (result.error || "unknown") : " | email: " + (result.email || "?")) + " | proxy=" + (boundProxy || "direct"));
+      if (result.type !== "success") {
+        process.stderr.write("antigravity login failed — token exchange error: " + (result.error || "unknown") + "\n");
+        return null;
+      }
+      const account = toCoreAccount(result);
+      addAccount(PROVIDER_ID, account);
+      dbg("finish: addAccount done id=" + account.id);
+      if (boundProxy) proxyManager.bindAccountProxy(account.id, boundProxy);
+      return account;
+    } catch (error) {
+      dbg("finish: THREW " + (error && error.stack || error));
+      throw error;
+    } finally {
+      closeListener();
+    }
+  };
+
   return {
     url: authorization.url,
-    instructions: "Sign in with Google. In a container the localhost redirect won't load — copy the full URL from your browser's address bar (or just the code) and paste it here.",
-    complete: async (input) => {
-      try {
-        dbg("complete: invoked (input " + (input ? "provided len=" + String(input).trim().length : "absent, awaiting callback") + ", proxy=" + (proxy || "none") + ")");
-        // opencode (method "code") passes the pasted code / redirect URL; the CLI
-        // passes nothing and we race the loopback listener against a terminal paste.
-        const cb = input ? parsePastedCallback(input) : await awaitCallback(listener);
-        dbg("complete: parsed callback — code=" + (cb && cb.code ? "present(len " + cb.code.length + ")" : "MISSING") + ", state=" + (cb && cb.state ? "present" : "absent"));
-        if (!cb || !cb.code) { dbg("complete: no code -> returning null (0 accounts)"); return null; }
-        // a pasted bare code has no state; rebuild it from this flow's own verifier
-        const state = cb.state || encodeState({ verifier: authorization.verifier, projectId: authorization.projectId });
-        let boundProxy = proxy;
-        let result = await exchangeAntigravity(cb.code, state, { proxy });
-        // A dead/unreachable login proxy bricks the token exchange (the request
-        // never reaches Google, so the auth code is NOT consumed). Retry directly
-        // — a non-working proxy provides no isolation anyway — and then DON'T bind
-        // that proxy to the account, so runtime requests don't inherit it either.
-        if (result.type !== "success" && proxy && isConnectError(result.error)) {
-          dbg("complete: proxied exchange could not connect via " + proxy + " — retrying directly");
-          process.stderr.write("antigravity: login proxy " + proxy + " unreachable — retrying token exchange without a proxy.\n");
-          boundProxy = null;
-          result = await exchangeAntigravity(cb.code, state, {});
-        }
-        dbg("complete: token exchange -> " + result.type + (result.type !== "success" ? " | error: " + (result.error || "unknown") : " | email: " + (result.email || "?")) + " | proxy=" + (boundProxy || "direct"));
-        if (result.type !== "success") {
-          process.stderr.write("antigravity login failed — token exchange error: " + (result.error || "unknown") + "\n");
-          return null;
-        }
-        const account = toCoreAccount(result);
-        addAccount(PROVIDER_ID, account);
-        dbg("complete: addAccount done id=" + account.id + " -> account should now appear in the list");
-        if (boundProxy) proxyManager.bindAccountProxy(account.id, boundProxy);
-        return account;
-      } catch (error) {
-        dbg("complete: THREW " + (error && error.stack || error));
-        throw error;
-      } finally {
-        try { await listener.close(); } catch {}
-      }
-    },
+    instructions: "Sign in with Google — approve in your browser and we'll detect it automatically. In a container the localhost redirect won't load, so copy the full URL from your address bar (or just the code) and paste it here instead.",
+    // paste fallback: opencode's "code" method + the in-tab paste both pass text
+    complete: (input) => finish(parsePastedCallback(input)),
+    // primary: the loopback listener fires when the browser reaches our localhost
+    loopback: listener.waitForCallback()
+      .then((url) => { dbg("loopback: listener fired"); return finish({ code: url.searchParams.get("code"), state: url.searchParams.get("state") }); })
+      .catch((e) => { dbg("loopback: listener rejected/closed: " + (e && e.message || e)); return null; }),
+    cancel: closeListener,
   };
 }
 
 export async function login(opts) {
   const log = (opts && opts.log) || ((message) => process.stderr.write(message + "\n"));
   const flow = await loginFlow();
-  log("Open this URL in your browser to sign in with Google:\n\n  " + flow.url + "\n\nAfter approving, your browser will try to open a localhost page. In a container it won't load — that's expected. Copy the full URL from your browser's address bar and paste it below.\n");
+  log("Open this URL in your browser to sign in with Google:\n\n  " + flow.url + "\n\nApprove in your browser — we'll detect it automatically. In a container the localhost page won't load; copy the full URL from your address bar and paste it below.\n");
   tryOpenBrowser(flow.url);
-  const account = await flow.complete();
+  // race the loopback auto-capture against a terminal paste; close the readline as
+  // soon as either settles so a loopback win doesn't leave it dangling
+  let account = null;
+  if (isTTY()) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const pasteP = rl.question("Paste the full redirect URL from your browser (or just the code), then Enter: ").then((a) => flow.complete(a)).catch(() => null);
+    account = await Promise.race([flow.loopback, pasteP]);
+    try { rl.close(); } catch {}
+  } else {
+    account = await flow.loopback;
+  }
+  try { flow.cancel(); } catch {}
   if (!account) throw new Error("login failed");
   log("Logged in" + (account.email ? " as " + account.email : "") + " and saved to the antigravity account pool.");
   return account;
