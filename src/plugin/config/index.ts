@@ -29,3 +29,8 @@ export {
   initRuntimeConfig,
   getKeepThinking,
 } from "./loader";
+
+export {
+  getConfigValue,
+  setConfigValue,
+} from "./edit";

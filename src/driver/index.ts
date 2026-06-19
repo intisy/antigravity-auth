@@ -15,6 +15,7 @@ import { oauthConfig } from "./config.js";
 import { laneFor, headerStyleFor, parseRateLimitReason, resetTimeFor } from "./lanes.js";
 import { login, loginFlow } from "./login.js";
 import { createAntigravityAccounts } from "./accounts-controller.js";
+import { getConfigValue, setConfigValue } from "../plugin/config/index.js";
 
 const PROVIDER_ID = "antigravity";
 const MAX_ATTEMPTS = 6;   // total account/endpoint attempts before giving up
@@ -241,6 +242,139 @@ async function fetchModels(ctx) {
   return buildAntigravityCatalog(payload);
 }
 
+// Grouped field schema for the generic settings UI core-auth renders. Every
+// meaningful schema.ts option lands in exactly one group; hints are pulled from
+// the schema doc comments. SKIPPED: $schema, model_ranking (array, handled
+// elsewhere), quota_fallback (deprecated).
+const settingsGroups = [
+  {
+    title: "Account rotation & scheduling",
+    fields: [
+      { key: "account_selection_strategy", label: "Account selection", type: "enum", options: ["sticky", "round-robin", "hybrid"], hint: "How accounts are picked for requests: sticky keeps cache, round-robin maximizes throughput, hybrid balances by health." },
+      { key: "scheduling_mode", label: "Scheduling mode", type: "enum", options: ["cache_first", "balance", "performance_first"], hint: "Rate-limit behavior: cache_first waits for the same account, balance switches immediately, performance_first round-robins." },
+      { key: "switch_on_first_rate_limit", label: "Switch on first rate limit", type: "bool", hint: "Switch to another account immediately on the first rate limit instead of retrying the same one." },
+      { key: "max_cache_first_wait_seconds", label: "Max cache-first wait (s)", type: "number", min: 5, max: 300, hint: "Maximum seconds to wait for the same account in cache_first mode before switching." },
+      { key: "pid_offset_enabled", label: "PID account offset", type: "bool", hint: "Different sessions prefer different starting accounts to distribute load across parallel agents." },
+    ],
+  },
+  {
+    title: "Model fallback",
+    fields: [
+      { key: "auto_mode", label: "Auto mode", type: "bool", hint: "When a request targets antigravity-auto, dynamically select the best available model." },
+      { key: "auto_mode_stage", label: "Auto mode stage", type: "enum", options: ["best", "high", "balanced", "fastest"], hint: "Which quality stage Auto mode targets first." },
+      { key: "fallback_enabled", label: "Fallback enabled", type: "bool", hint: "If the current model is rate-limited, fall back to the next stage instead of waiting or failing." },
+      { key: "cli_first", label: "Gemini CLI first", type: "bool", hint: "Try gemini-cli routing before Antigravity for Gemini models." },
+    ],
+  },
+  {
+    title: "Rate limits & retries",
+    fields: [
+      { key: "max_rate_limit_wait_seconds", label: "Max rate-limit wait (s)", type: "number", min: 0, max: 3600, hint: "Maximum seconds to wait when all accounts are rate-limited (0 = wait indefinitely)." },
+      { key: "default_retry_after_seconds", label: "Default retry-after (s)", type: "number", min: 1, max: 300, hint: "Retry delay when the API does not return a retry-after header." },
+      { key: "max_backoff_seconds", label: "Max backoff (s)", type: "number", min: 5, max: 300, hint: "Caps how long exponential backoff can grow." },
+      { key: "request_jitter_max_ms", label: "Request jitter max (ms)", type: "number", min: 0, max: 5000, hint: "Maximum random delay before each request to break predictable cadence (0 = disabled)." },
+      { key: "failure_ttl_seconds", label: "Failure TTL (s)", type: "number", min: 60, max: 7200, hint: "After this period without failures, an account's consecutive-failure count resets to 0." },
+      { key: "empty_response_max_attempts", label: "Empty-response max attempts", type: "number", min: 1, max: 10, hint: "Maximum retries when Antigravity returns an empty response." },
+      { key: "empty_response_retry_delay_ms", label: "Empty-response retry delay (ms)", type: "number", min: 500, max: 10000, hint: "Delay between empty-response retries." },
+    ],
+  },
+  {
+    title: "Quotas",
+    fields: [
+      { key: "soft_quota_threshold_percent", label: "Soft quota threshold (%)", type: "number", min: 1, max: 100, hint: "Skip an account during selection once its quota usage reaches this percentage (100 = disabled)." },
+      { key: "quota_refresh_interval_minutes", label: "Quota refresh interval (min)", type: "number", min: 0, max: 60, hint: "How often quota data is refreshed in the background (0 = manual only)." },
+      { key: "soft_quota_cache_ttl_minutes", label: "Soft quota cache TTL", type: "string", hint: "auto or a number of minutes." },
+    ],
+  },
+  {
+    title: "Token refresh",
+    fields: [
+      { key: "proactive_token_refresh", label: "Proactive token refresh", type: "bool", hint: "Refresh tokens in the background before they expire so requests never block on refresh." },
+      { key: "proactive_refresh_buffer_seconds", label: "Refresh buffer (s)", type: "number", min: 60, max: 7200, hint: "Seconds before token expiry to trigger a proactive refresh." },
+      { key: "proactive_refresh_check_interval_seconds", label: "Refresh check interval (s)", type: "number", min: 30, max: 1800, hint: "Interval between proactive refresh checks." },
+    ],
+  },
+  {
+    title: "Session recovery",
+    fields: [
+      { key: "session_recovery", label: "Session recovery", type: "bool", hint: "Automatically recover from tool_result_missing errors, showing a toast when they occur." },
+      { key: "auto_resume", label: "Auto resume", type: "bool", hint: "Automatically send a continue prompt after a successful recovery." },
+      { key: "resume_text", label: "Resume text", type: "string", hint: "Text sent when auto-resuming after recovery." },
+    ],
+  },
+  {
+    title: "Claude handling",
+    fields: [
+      { key: "keep_thinking", label: "Keep thinking blocks", type: "bool", hint: "Preserve Claude thinking blocks using signature caching instead of stripping them." },
+      { key: "claude_tool_hardening", label: "Tool hardening", type: "bool", hint: "Inject parameter signatures and strict tool-usage rules to prevent Claude tool hallucination." },
+      { key: "claude_prompt_auto_caching", label: "Prompt auto-caching", type: "bool", hint: "Add top-level cache_control to Claude prompts when absent." },
+      { key: "tool_id_recovery", label: "Tool ID recovery", type: "bool", hint: "Recover orphaned tool responses with mismatched IDs by matching on function name or placeholders." },
+    ],
+  },
+  {
+    title: "Notifications",
+    fields: [
+      { key: "quiet_mode", label: "Quiet mode", type: "bool", hint: "Suppress most toast notifications (recovery toasts always show)." },
+      { key: "toast_scope", label: "Toast scope", type: "enum", options: ["root_only", "all"], hint: "Which sessions show toasts: root_only silences subagents, all shows everything." },
+    ],
+  },
+  {
+    title: "Debug",
+    fields: [
+      { key: "debug", label: "Debug logging", type: "bool", hint: "Enable debug logging to file." },
+      { key: "debug_tui", label: "Debug in TUI", type: "bool", hint: "Show debug logs in the TUI log panel (independent of file logging)." },
+      { key: "debug_gemini_payloads", label: "Debug Gemini payloads", type: "bool", hint: "Write the raw payload sent to Gemini models to a debug log file." },
+      { key: "log_dir", label: "Log directory", type: "string", hint: "Custom directory for debug logs." },
+    ],
+  },
+  {
+    title: "Advanced — health score",
+    fields: [
+      { key: "health_score.initial", label: "Initial", type: "number", min: 0, max: 100, hint: "Starting health score for a new account." },
+      { key: "health_score.success_reward", label: "Success reward", type: "number", min: 0, max: 10, hint: "Score added on a successful request." },
+      { key: "health_score.rate_limit_penalty", label: "Rate-limit penalty", type: "number", min: -50, max: 0, hint: "Score change applied on a rate limit." },
+      { key: "health_score.failure_penalty", label: "Failure penalty", type: "number", min: -100, max: 0, hint: "Score change applied on a failure." },
+      { key: "health_score.recovery_rate_per_hour", label: "Recovery rate / hour", type: "number", min: 0, max: 20, hint: "Score recovered per hour of inactivity." },
+      { key: "health_score.min_usable", label: "Min usable", type: "number", min: 0, max: 100, hint: "Minimum score for an account to remain selectable." },
+      { key: "health_score.max_score", label: "Max score", type: "number", min: 50, max: 100, hint: "Upper bound on the health score." },
+    ],
+  },
+  {
+    title: "Advanced — token bucket",
+    fields: [
+      { key: "token_bucket.max_tokens", label: "Max tokens", type: "number", min: 1, max: 1000, hint: "Bucket capacity for the token-bucket rate limiter." },
+      { key: "token_bucket.regeneration_rate_per_minute", label: "Regeneration / min", type: "number", min: 0.1, max: 60, hint: "Tokens regenerated per minute." },
+      { key: "token_bucket.initial_tokens", label: "Initial tokens", type: "number", min: 1, max: 1000, hint: "Tokens the bucket starts with." },
+    ],
+  },
+  {
+    title: "Advanced — signature cache",
+    fields: [
+      { key: "signature_cache.enabled", label: "Enabled", type: "bool", hint: "Cache thinking-block signatures to disk." },
+      { key: "signature_cache.memory_ttl_seconds", label: "Memory TTL (s)", type: "number", min: 60, max: 86400, hint: "In-memory signature cache TTL." },
+      { key: "signature_cache.disk_ttl_seconds", label: "Disk TTL (s)", type: "number", min: 3600, max: 604800, hint: "On-disk signature cache TTL." },
+      { key: "signature_cache.write_interval_seconds", label: "Write interval (s)", type: "number", min: 10, max: 600, hint: "Background interval for flushing the signature cache to disk." },
+    ],
+  },
+  {
+    title: "Plugin",
+    fields: [
+      { key: "auto_update", label: "Auto update", type: "bool", hint: "Enable automatic plugin updates." },
+    ],
+  },
+];
+
+// soft_quota_cache_ttl_minutes is a string field but stores either "auto" or a
+// Number; coerce numeric text before persisting.
+function setSettingValue(key: string, value: any): void {
+  if (key === "soft_quota_cache_ttl_minutes" && typeof value === "string" && value !== "auto") {
+    const numeric = Number(value);
+    setConfigValue(key, Number.isNaN(numeric) ? value : numeric);
+    return;
+  }
+  setConfigValue(key, value);
+}
+
 export const driver = {
   id: PROVIDER_ID,
   label: "Antigravity",
@@ -254,6 +388,11 @@ export const driver = {
   loginFlow,
   accounts: createAntigravityAccounts(manager),
   proxies: true,
+  settings: {
+    groups: settingsGroups,
+    get: getConfigValue,
+    set: setSettingValue,
+  },
 };
 
 export const AntigravityProvider = defineProvider(driver).opencode;
