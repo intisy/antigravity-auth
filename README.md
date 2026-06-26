@@ -2,9 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/antigravity-auth.svg)](https://www.npmjs.com/package/antigravity-auth)
 [![npm downloads](https://img.shields.io/npm/dm/antigravity-auth.svg)](https://www.npmjs.com/package/antigravity-auth)
-[![CI](https://github.com/intisy/antigravity-auth/actions/workflows/publish.yml/badge.svg)](https://github.com/intisy/antigravity-auth/actions/workflows/publish.yml)
+[![CI](https://github.com/intisy-ai/antigravity-auth/actions/workflows/publish.yml/badge.svg)](https://github.com/intisy-ai/antigravity-auth/actions/workflows/publish.yml)
 
-Google Antigravity provider for OpenCode and Claude Code, built as a thin driver on top of [core-auth](https://github.com/intisy/core-auth). core-auth owns all the generic work — multi-account storage, selection/rotation, token refresh, and rate-limit/cooldown state — while this package supplies only the antigravity specifics: the request/response transform, the Cloud Code Assist endpoints, and the Google OAuth login. The same account pool is shared by both OpenCode and Claude Code.
+Google Antigravity provider for OpenCode and Claude Code, built as a thin driver on top of [core-auth](https://github.com/intisy-ai/core-auth). core-auth owns all the generic work — multi-account storage, selection/rotation, token refresh, and rate-limit/cooldown state — while this package supplies only the antigravity specifics: the request/response transform, the Cloud Code Assist endpoints, and the Google OAuth login. The same account pool is shared by both OpenCode and Claude Code.
 
 ## Under-the-Hood Architecture
 
@@ -56,7 +56,7 @@ The driver maps a requested model to a lane (`claude`, `gemini-antigravity`, `ge
 Add an entry to `plugins.json` and let the loader clone + build it:
 
 ```json
-{ "name": "antigravity-auth", "url": "https://github.com/intisy/antigravity-auth", "enabled": true, "autoUpdate": true }
+{ "name": "antigravity-auth", "url": "https://github.com/intisy-ai/antigravity-auth", "enabled": true, "autoUpdate": true }
 ```
 
 Then log in (writes to the shared core-auth account pool, used by both apps):
