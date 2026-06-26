@@ -32,6 +32,7 @@ jobs:
       - run: npm install
 
       - run: npm run build
+      - run: npx vitest run
 
       - name: Set version from tag
         run: |
