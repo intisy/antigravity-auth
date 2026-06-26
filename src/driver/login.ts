@@ -10,7 +10,32 @@ import { startOAuthListener, addAccount, proxyManager, isTTY } from "../../core-
 import { authorizeAntigravity, exchangeAntigravity, encodeState } from "../antigravity/oauth.js";
 import { parseRefreshParts } from "../plugin/auth.js";
 import { generateFingerprint } from "../plugin/fingerprint.js";
-import { ANTIGRAVITY_REDIRECT_URI } from "../constants.js";
+import { generateSyntheticProjectId } from "../plugin/request.js";
+import { ANTIGRAVITY_REDIRECT_URI, ANTIGRAVITY_ENDPOINT_PROD, getAntigravityHeaders } from "../constants.js";
+
+// Google OAuth succeeds for ANY Google account, but Antigravity only accepts
+// enabled accounts — so we must actually call the Antigravity API before saving,
+// or ineligible accounts (e.g. non-enabled domains) get added and then fail on use.
+// Mirrors accounts-controller verify(): 200/400 = accepted. 401/403 = rejected.
+// Anything else (5xx, network, timeout) is INCONCLUSIVE → fail-open (don't block a
+// valid account because the check itself was flaky).
+async function checkAntigravityAccess(access, projectId, proxy) {
+  try {
+    const headers = { ...getAntigravityHeaders(), Authorization: "Bearer " + access, "Content-Type": "application/json" };
+    headers["x-goog-user-project"] = projectId || generateSyntheticProjectId();
+    const body = JSON.stringify({ model: "gemini-3-flash", request: { model: "gemini-3-flash", contents: [{ role: "user", parts: [{ text: "ping" }] }], generationConfig: { maxOutputTokens: 1, temperature: 0 } } });
+    const aborter = new AbortController();
+    const timer = setTimeout(() => aborter.abort(), 20000);
+    let res;
+    try { res = await fetch(ANTIGRAVITY_ENDPOINT_PROD + "/v1internal:streamGenerateContent?alt=sse", { method: "POST", headers, body, signal: aborter.signal, proxy }); }
+    finally { clearTimeout(timer); }
+    if (res.status === 200 || res.status === 400) return { ok: true };
+    if (res.status === 401 || res.status === 403) return { ok: false, status: res.status };
+    return { ok: true, inconclusive: res.status };
+  } catch (e) {
+    return { ok: true, inconclusive: (e && e.message) || "error" };
+  }
+}
 
 const PROVIDER_ID = "antigravity";
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -108,6 +133,15 @@ export async function loginFlow() {
         return null;
       }
       const account = toCoreAccount(result);
+      // gate: confirm Antigravity actually accepts this account before saving it
+      const projectId = account.meta.managedProjectId || account.meta.projectId || result.projectId || "";
+      const check = await checkAntigravityAccess(result.access, projectId, boundProxy);
+      if (!check.ok) {
+        dbg("finish: Antigravity REJECTED " + (result.email || "?") + " (status " + check.status + ") — not adding");
+        process.stderr.write("antigravity: this account isn't enabled for Antigravity (HTTP " + check.status + ") — not added.\nUse a Google account that has Antigravity/Gemini access.\n");
+        return null;
+      }
+      if (check.inconclusive) dbg("finish: access check inconclusive (" + check.inconclusive + ") — adding anyway");
       addAccount(PROVIDER_ID, account);
       dbg("finish: addAccount done id=" + account.id);
       if (boundProxy) proxyManager.bindAccountProxy(account.id, boundProxy);
