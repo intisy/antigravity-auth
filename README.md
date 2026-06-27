@@ -28,7 +28,7 @@ flowchart TD
 
     subgraph Core [core-auth library bundled in]
         MGR[AccountManager]
-        STORE[(core-auth-accounts.json)]
+        STORE[(accounts.json)]
         MGR <--> STORE
     end
 
@@ -90,7 +90,7 @@ Config is read from, in order of preference:
 }
 ```
 
-Every key is editable from chat via `/antigravity-config` (`list` / `get <key>` / `set <key> <value>`) — see Commands. Accounts live in the core-auth store at `<configDir>/config/core-auth-accounts.json`. The OAuth client id/secret are read from `ANTIGRAVITY_CLIENT_ID` / `ANTIGRAVITY_CLIENT_SECRET` (env) when set, falling back to the built-in values.
+Every key is editable from chat via `/antigravity-config` (`list` / `get <key>` / `set <key> <value>`) — see Commands. Accounts live in the core-auth store at `<configDir>/config/accounts.json`. The OAuth client id/secret are read from `ANTIGRAVITY_CLIENT_ID` / `ANTIGRAVITY_CLIENT_SECRET` (env) when set, falling back to the built-in values.
 
 ## Commands
 
