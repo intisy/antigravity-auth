@@ -78,6 +78,8 @@ antigravity login
 
 ## Configuration
 
+> Config files are **auto-created with defaults on first run** (via core `ensureConfig`). **Global console logging** for every plugin is toggled in `config/settings.json` (`logConsole: true`, the opencode.json-equivalent).
+
 Config is read from, in order of preference:
 
 1. `~/.config/opencode/config/antigravity.json` (Claude: `~/.claude/config/antigravity.json`)
