@@ -1,6 +1,6 @@
 {
   "name": "antigravity-auth",
-  "version": "1.8.7",
+  "version": "1.8.8",
   "description": "Google Antigravity provider for OpenCode and Claude Code, built on core-auth — multi-account rotation, quota management, proxy support",
   "main": "dist/index.js",
   "type": "module",
