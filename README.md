@@ -1,8 +1,8 @@
 # antigravity-auth
 
-[![npm version](https://img.shields.io/npm/v/antigravity-auth.svg)](https://www.npmjs.com/package/antigravity-auth)
-[![npm downloads](https://img.shields.io/npm/dm/antigravity-auth.svg)](https://www.npmjs.com/package/antigravity-auth)
-[![CI](https://github.com/intisy-ai/antigravity-auth/actions/workflows/publish.yml/badge.svg)](https://github.com/intisy-ai/antigravity-auth/actions/workflows/publish.yml)
+[![npm version](https://img.shields.io/npm/v/antigravity-auth)](https://www.npmjs.com/package/antigravity-auth)
+[![npm downloads](https://img.shields.io/npm/dm/antigravity-auth)](https://www.npmjs.com/package/antigravity-auth)
+[![CI](https://img.shields.io/github/actions/workflow/status/intisy-ai/antigravity-auth/publish.yml)](https://github.com/intisy-ai/antigravity-auth/actions)
 
 Google Antigravity provider for OpenCode and Claude Code, built as a thin driver on top of [core-auth](https://github.com/intisy-ai/core-auth). core-auth owns all the generic work — multi-account storage, selection/rotation, token refresh, and rate-limit/cooldown state — while this package supplies only the antigravity specifics: the request/response transform, the Cloud Code Assist endpoints, and the Google OAuth login. The same account pool is shared by both OpenCode and Claude Code.
 
@@ -36,6 +36,8 @@ flowchart TD
     LOGIN -->|addAccount| MGR
 ```
 
+## Driver Detail
+
 The driver maps a requested model to a lane (`claude`, `gemini-antigravity`, `gemini-cli`), asks `AccountManager` for an account + fresh access token, builds the upstream request with the reused transform layer, and dispatches with endpoint fallback. On a rate-limit it reports the reset time to core and rotates; on success it transforms the response back to the caller's format.
 
 ## Structure
@@ -49,70 +51,149 @@ The driver maps a requested model to a lane (`claude`, `gemini-antigravity`, `ge
   - `commands.ts` — cross-app slash-command definitions + their CLI actions
   - `core-auth/` — the core-auth library (git submodule, bundled into the output)
   - `core/` — shared [`intisy-ai/core`](https://github.com/intisy-ai/core) submodule (config + logging + command framework), bundled in
-- `dist/` — bundled `index.js`, `handler.js`, `cli.js` (generated; not committed)
+- `dist/`
+  - bundled `index.js`, `handler.js`, `cli.js` (generated; not committed)
 
 ## Installation
 
-### Via plugin-updater (primary)
-
-Add an entry to `plugins.json` and let the loader clone + build it:
-
-```json
-{ "name": "antigravity-auth", "url": "https://github.com/intisy-ai/antigravity-auth", "enabled": true, "autoUpdate": true }
-```
-
-Then log in (writes to the shared core-auth account pool, used by both apps):
+### Via plugin-updater (recommended)
 
 ```bash
-node ~/.claude/repos/antigravity-auth/dist/cli.js login
+npx plugin-updater@latest init https://github.com/intisy-ai/antigravity-auth
 ```
-
-In OpenCode, run `oc auth login` once and pick **Antigravity** so OpenCode routes through the provider.
 
 ### Via npm
 
 ```bash
-npm install -g antigravity-auth
-antigravity login
+npm install antigravity-auth
 ```
 
 ## Configuration
 
-> Config files are **never auto-created on launch** — settings are registered with defaults (core `defineConfig`) and edited in the loader's **Plugins → Configure** screen (or `/<plugin>-config`); a file is written only when you change a value. **Global console logging** for every plugin is toggled in `config/settings.json` (`logConsole: true`, the opencode.json-equivalent).
-
-Config is read from, in order of preference:
-
-1. `~/.config/opencode/config/antigravity.json` (Claude: `~/.claude/config/antigravity.json`)
-2. `~/.config/opencode/antigravity.json` (fallback)
+Config file: `<configDir>/config/antigravity.json` (edit via the loader or `/antigravity-config set`).
 
 ```json
 {
+  "quiet_mode": false,
+  "toast_scope": "root_only",
+  "debug": false,
+  "debug_tui": false,
+  "debug_gemini_payloads": false,
+  "keep_thinking": false,
+  "session_recovery": true,
+  "auto_resume": true,
+  "resume_text": "continue",
+  "empty_response_max_attempts": 4,
+  "empty_response_retry_delay_ms": 2000,
+  "tool_id_recovery": true,
+  "claude_tool_hardening": true,
+  "claude_prompt_auto_caching": false,
+  "proactive_token_refresh": true,
+  "proactive_refresh_buffer_seconds": 1800,
+  "proactive_refresh_check_interval_seconds": 300,
+  "max_rate_limit_wait_seconds": 300,
+  "quota_fallback": false,
+  "cli_first": false,
+  "fallback_enabled": false,
+  "auto_mode": true,
   "account_selection_strategy": "hybrid",
+  "pid_offset_enabled": false,
+  "switch_on_first_rate_limit": true,
+  "scheduling_mode": "cache_first",
+  "max_cache_first_wait_seconds": 60,
+  "failure_ttl_seconds": 3600,
+  "default_retry_after_seconds": 60,
+  "max_backoff_seconds": 60,
+  "request_jitter_max_ms": 0,
+  "soft_quota_threshold_percent": 90,
+  "quota_refresh_interval_minutes": 15,
+  "soft_quota_cache_ttl_minutes": "auto",
+  "auto_update": true,
+  "signature_cache": {
+    "enabled": true,
+    "memory_ttl_seconds": 3600,
+    "disk_ttl_seconds": 172800,
+    "write_interval_seconds": 60
+  },
+  "health_score": {
+    "initial": 70,
+    "success_reward": 1,
+    "rate_limit_penalty": -10,
+    "failure_penalty": -20,
+    "recovery_rate_per_hour": 2,
+    "min_usable": 50,
+    "max_score": 100
+  },
+  "token_bucket": {
+    "max_tokens": 50,
+    "regeneration_rate_per_minute": 6,
+    "initial_tokens": 50
+  },
   "logging": true
 }
 ```
 
-Every key is editable from chat via `/antigravity-config` (`list` / `get <key>` / `set <key> <value>`) — see Commands. Accounts live in the core-auth store at `<configDir>/config/accounts.json`. The OAuth client id/secret are read from `ANTIGRAVITY_CLIENT_ID` / `ANTIGRAVITY_CLIENT_SECRET` (env) when set, falling back to the built-in values.
+| Key | Default |
+| --- | --- |
+| `quiet_mode` | `false` |
+| `toast_scope` | `"root_only"` |
+| `debug` | `false` |
+| `debug_tui` | `false` |
+| `debug_gemini_payloads` | `false` |
+| `keep_thinking` | `false` |
+| `session_recovery` | `true` |
+| `auto_resume` | `true` |
+| `resume_text` | `"continue"` |
+| `empty_response_max_attempts` | `4` |
+| `empty_response_retry_delay_ms` | `2000` |
+| `tool_id_recovery` | `true` |
+| `claude_tool_hardening` | `true` |
+| `claude_prompt_auto_caching` | `false` |
+| `proactive_token_refresh` | `true` |
+| `proactive_refresh_buffer_seconds` | `1800` |
+| `proactive_refresh_check_interval_seconds` | `300` |
+| `max_rate_limit_wait_seconds` | `300` |
+| `quota_fallback` | `false` |
+| `cli_first` | `false` |
+| `fallback_enabled` | `false` |
+| `auto_mode` | `true` |
+| `account_selection_strategy` | `"hybrid"` |
+| `pid_offset_enabled` | `false` |
+| `switch_on_first_rate_limit` | `true` |
+| `scheduling_mode` | `"cache_first"` |
+| `max_cache_first_wait_seconds` | `60` |
+| `failure_ttl_seconds` | `3600` |
+| `default_retry_after_seconds` | `60` |
+| `max_backoff_seconds` | `60` |
+| `request_jitter_max_ms` | `0` |
+| `soft_quota_threshold_percent` | `90` |
+| `quota_refresh_interval_minutes` | `15` |
+| `soft_quota_cache_ttl_minutes` | `"auto"` |
+| `auto_update` | `true` |
+| `signature_cache` | `{"enabled":true,"memory_ttl_seconds":3600,"disk_ttl_seconds":172800,"write_interval_seconds":60}` |
+| `health_score` | `{"initial":70,"success_reward":1,"rate_limit_penalty":-10,"failure_penalty":-20,"recovery_rate_per_hour":2,"min_usable":50,"max_score":100}` |
+| `token_bucket` | `{"max_tokens":50,"regeneration_rate_per_minute":6,"initial_tokens":50}` |
+| `logging` | `true` |
 
 ## Commands
 
-Deployed automatically to both apps on load (`~/.config/opencode/command/` and `~/.claude/commands/`):
-
-| Command | Description |
-| --- | --- |
-| `/antigravity-config` | View/change any config key in `antigravity.json`: `list`, `get <key>`, `set <key> <value>`. 100% of the config is reachable here. |
-| `/antigravity-accounts` | List signed-in Antigravity accounts and their enabled state. |
+| Command | Description | Arguments |
+| --- | --- | --- |
+| `/antigravity-config` | View and change antigravity configuration | `list | get <key> | set <key> <value>` |
+| `/antigravity-accounts` | List signed-in Antigravity accounts |  |
 
 ## Dependencies
 
-- **`core`** (required) — bundled git submodule (config + logging + commands); no separate install.
-- **`core-auth`** (required) — bundled git submodule (account store + provider framework).
-- **`sync-bridge`** (optional) — if present, the account store is mirrored to the other app; absent, it no-ops.
+- `core`
+- `core-auth`
+- `sync-bridge`
 
 ## Logging
 
-Logs are written to `<configDir>/logs/YYYY-MM-DD/antigravity-auth-HH-MM-SS.log`. Set `"logging": false` in the config file to disable.
+Logs are written to `<configDir>/logs/YYYY-MM-DD/antigravity-auth-HH-MM-SS.log` and are toggled by
+this plugin's `logging` config (default on). Console mirroring is global, off by default,
+and controlled by the shared `config/settings.json` `logConsole` flag.
 
 ## License
 
-MIT
+MIT.

@@ -42,6 +42,7 @@
   },
   "scripts": {
     "build": "npx tsc --project core-auth/tsconfig.json && node build.mjs",
+    "postbuild": "node dist/index.js readme",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && vitest run",
     "prepublishOnly": "npm run build"

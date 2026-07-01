@@ -10,4 +10,5 @@ runPluginContract({
   commands: ["antigravity-config", "antigravity-accounts"],
   deploy: "load",
   actions: [["accounts"]],
+  readme: true,
 });
